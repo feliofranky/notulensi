@@ -35,11 +35,6 @@ jobs:
       - name: Get Flutter Dependencies
         run: flutter pub get
 
-      - name: Patch Plugin Gradle Compatibility
-        shell: bash
-        run: |
-          find ~/.pub-cache -name "build.gradle" -path "*/record_android*/*" -exec sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' {} + || true
-
       - name: Configure Keystore Signing
         shell: bash
         run: |

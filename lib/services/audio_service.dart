@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 class AudioService {
+  static const MethodChannel _recordingChannel = MethodChannel('com.herz.notulensi/recording');
   final AudioRecorder _recorder = AudioRecorder();
   String? _currentPath;
   DateTime? _startTime;
@@ -44,6 +46,12 @@ class AudioService {
     );
 
     await _recorder.start(config, path: filePath);
+
+    // Keep screen awake & start Android Foreground Service with WakeLock
+    try {
+      await _recordingChannel.invokeMethod('startRecordingService');
+    } catch (_) {}
+
     return filePath;
   }
 
@@ -60,6 +68,11 @@ class AudioService {
   }
 
   Future<String?> stop() async {
+    // Release screen awake & stop Foreground Service
+    try {
+      await _recordingChannel.invokeMethod('stopRecordingService');
+    } catch (_) {}
+
     final path = await _recorder.stop();
     _currentPath = path;
     return path;
@@ -78,6 +91,9 @@ class AudioService {
   }
 
   void dispose() {
+    try {
+      _recordingChannel.invokeMethod('stopRecordingService');
+    } catch (_) {}
     _recorder.dispose();
   }
 }

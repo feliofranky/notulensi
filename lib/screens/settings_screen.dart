@@ -22,19 +22,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   final List<Map<String, String>> _availableModels = [
     {
-      'id': 'gemini-2.0-flash-lite',
-      'name': 'Gemini 2.0 Flash-Lite (Direkomendasikan)',
-      'desc': 'Sangat cepat, hemat kuota, mendukung multimodal audio langsung.',
+      'id': 'gemini-3.5-flash-lite',
+      'name': 'Gemini 3.5 Flash-Lite (Direkomendasikan)',
+      'desc': 'Model terbaru yang sangat cepat, hemat kuota, multimodal audio langsung.',
     },
     {
-      'id': 'gemini-2.0-flash',
-      'name': 'Gemini 2.0 Flash',
-      'desc': 'Model generasi baru dengan kapabilitas penalaran audio tinggi.',
+      'id': 'gemini-3.5-flash',
+      'name': 'Gemini 3.5 Flash',
+      'desc': 'Model generasi baru dengan kapabilitas penalaran dan akurasi tinggi.',
     },
     {
-      'id': 'gemini-1.5-flash',
-      'name': 'Gemini 1.5 Flash',
-      'desc': 'Model klasik yang stabil dengan konteks hingga 1 juta token.',
+      'id': 'gemini-3.5-transcribe',
+      'name': 'Gemini 3.5 Transcribe',
+      'desc': 'Spesialis audio percakapan & transkripsi akurat.',
     },
   ];
 

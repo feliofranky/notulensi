@@ -8,7 +8,7 @@ class StorageService {
   static const String _keySampleRate = 'audio_sample_rate';
   static const String _keyNotes = 'meeting_notes_v1';
 
-  static const String defaultModel = 'gemini-2.0-flash-lite';
+  static const String defaultModel = 'gemini-3.5-flash-lite';
 
   // API Key
   static Future<String> getApiKey() async {

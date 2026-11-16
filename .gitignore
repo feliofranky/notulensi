@@ -33,3 +33,4 @@
 **/android/captures/
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
+*.apk

@@ -7,7 +7,7 @@ class GeminiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
 
   /// Uji keabsahan API Key dengan request ringan
-  static Future<bool> testApiKey(String apiKey, {String model = 'gemini-2.0-flash-lite'}) async {
+  static Future<bool> testApiKey(String apiKey, {String model = 'gemini-3.5-flash-lite'}) async {
     final cleanKey = apiKey.trim();
     if (cleanKey.isEmpty) {
       throw Exception('API Key Gemini tidak boleh kosong.');
@@ -50,7 +50,7 @@ class GeminiService {
     required String audioPath,
     required int durationSeconds,
     required String apiKey,
-    String model = 'gemini-2.0-flash-lite',
+    String model = 'gemini-3.5-flash-lite',
   }) async {
     final cleanKey = apiKey.trim();
     if (cleanKey.isEmpty) {

@@ -105,7 +105,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
           'parts': [
             {
               'inlineData': {
-                'mimeType': 'audio/mp4',
+                'mimeType': audioPath.endsWith('.wav') ? 'audio/wav' : 'audio/aac',
                 'data': base64Audio,
               }
             },

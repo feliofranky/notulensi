@@ -31,13 +31,13 @@ class AudioService {
     }
 
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final filePath = p.join(recordingsDir.path, 'meeting_$timestamp.m4a');
+    final filePath = p.join(recordingsDir.path, 'meeting_$timestamp.wav');
     _currentPath = filePath;
     _startTime = DateTime.now();
 
-    // 16kHz mono AAC-LC provides crystal-clear human voice clarity with tiny file size (~280KB/minute)
+    // 16kHz mono WAV provides crystal-clear human voice clarity with native Gemini multimodal support
     final config = RecordConfig(
-      encoder: AudioEncoder.aacLc,
+      encoder: AudioEncoder.wav,
       bitRate: 64000,
       sampleRate: sampleRate,
       numChannels: 1,

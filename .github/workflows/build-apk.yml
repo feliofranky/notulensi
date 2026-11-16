@@ -1,0 +1,62 @@
+name: Build HerzNote Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  build:
+    name: Build HerzNote arm64 APK
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: "3.24.5"
+          cache: true
+
+      - name: Get Flutter Dependencies
+        run: flutter pub get
+
+      - name: Configure Keystore Signing
+        shell: bash
+        run: |
+          cat << 'EOF' > android/key.properties
+          storePassword=HerzView2026SecureKey
+          keyPassword=HerzView2026SecureKey
+          keyAlias=herzview
+          storeFile=herzview-release.jks
+          EOF
+          cp android/key.properties android/app/key.properties
+          cp android/app/herzview-release.jks android/herzview-release.jks || true
+
+      - name: Build Android Release APK
+        shell: bash
+        run: |
+          flutter build apk --release --target-platform android-arm64
+          mkdir -p output-apk
+          cp build/app/outputs/flutter-apk/*.apk output-apk/HerzNote-release.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HerzNote-release
+          path: output-apk/HerzNote-release.apk
+          if-no-files-found: error

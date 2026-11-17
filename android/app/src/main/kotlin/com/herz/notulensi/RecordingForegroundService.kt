@@ -63,9 +63,9 @@ class RecordingForegroundService : Service() {
         )
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🔴 HerzNote sedang merekam rapat...")
+            .setContentTitle("HerzNote sedang merekam rapat")
             .setContentText("Rekaman suara tetap aktif di latar belakang walau layar mati.")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.mipmap.ic_stat_logo)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

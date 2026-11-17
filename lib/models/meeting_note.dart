@@ -67,25 +67,25 @@ class MeetingNote {
     return DateFormat('dd MMMM yyyy, HH:mm', 'id').format(date);
   }
 
-  /// Format ready to be copied and shared directly to WhatsApp
+  /// Format bersih dan profesional siap dibagikan ke WhatsApp tanpa emoji
   String toWhatsAppFormat() {
     final buffer = StringBuffer();
     final dateStr = DateFormat('EEEE, dd MMM yyyy - HH:mm', 'id').format(date);
 
-    buffer.writeln('📋 *NOTULENSI RAPAT: ${title.toUpperCase()}*');
-    buffer.writeln('🗓️ *$dateStr*');
-    buffer.writeln('⏱️ *Durasi Rekaman:* $formattedDuration');
-    buffer.writeln('═════════════════════════');
+    buffer.writeln('*NOTULENSI RAPAT: ${title.toUpperCase()}*');
+    buffer.writeln('Tanggal: $dateStr');
+    buffer.writeln('Durasi Rekaman: $formattedDuration');
+    buffer.writeln('─────────────────────────');
     buffer.writeln('');
 
     if (summary.trim().isNotEmpty) {
-      buffer.writeln('📝 *RINGKASAN EKSEKUTIF:*');
+      buffer.writeln('*RINGKASAN EKSEKUTIF:*');
       buffer.writeln(summary.trim());
       buffer.writeln('');
     }
 
     if (decisions.isNotEmpty) {
-      buffer.writeln('⚖️ *KEPUTUSAN RAPAT:*');
+      buffer.writeln('*KEPUTUSAN RAPAT:*');
       for (int i = 0; i < decisions.length; i++) {
         buffer.writeln('${i + 1}. ${decisions[i]}');
       }
@@ -93,17 +93,17 @@ class MeetingNote {
     }
 
     if (actionItems.isNotEmpty) {
-      buffer.writeln('✅ *ACTION ITEMS & PIC:*');
+      buffer.writeln('*ACTION ITEMS & PIC:*');
       for (int i = 0; i < actionItems.length; i++) {
         final item = actionItems[i];
-        final dl = item.deadline != '-' ? ' | Deadline: ${item.deadline}' : '';
+        final dl = item.deadline != '-' ? ' (Deadline: ${item.deadline})' : '';
         buffer.writeln('${i + 1}. [${item.pic}] ${item.task}$dl');
       }
       buffer.writeln('');
     }
 
-    buffer.writeln('═════════════════════════');
-    buffer.writeln('_Disusun otomatis oleh HerzNote AI_');
+    buffer.writeln('─────────────────────────');
+    buffer.writeln('_Disusun oleh HerzNote AI_');
 
     return buffer.toString();
   }

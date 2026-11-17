@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/meeting_note.dart';
 
@@ -71,8 +72,21 @@ class StorageService {
 
   static Future<void> deleteNote(String id) async {
     final notes = await loadNotes();
-    notes.removeWhere((n) => n.id == id);
-    await _saveAllNotes(notes);
+    final index = notes.indexWhere((n) => n.id == id);
+    if (index >= 0) {
+      final note = notes[index];
+      // Hapus berkas fisik rekaman audio .wav dari storage HP agar bersih tuntas
+      if (note.audioPath != null && note.audioPath!.isNotEmpty) {
+        try {
+          final file = File(note.audioPath!);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (_) {}
+      }
+      notes.removeAt(index);
+      await _saveAllNotes(notes);
+    }
   }
 
   static Future<void> _saveAllNotes(List<MeetingNote> notes) async {

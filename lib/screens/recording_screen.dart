@@ -173,11 +173,14 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
 
       _processingTimer?.cancel();
 
+      // Simpan langsung ke database lokal HP agar history langsung ter-update
+      await StorageService.saveNote(note);
+
       if (mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => ResultScreen(note: note, isNew: true),
+            builder: (_) => ResultScreen(note: note, isNew: false),
           ),
         );
       }
@@ -311,19 +314,12 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
             children: [
               const Spacer(),
 
-              // STATUS BADGE - Sleek, minimalist & elegant (Matching Home Screen style)
+              // STATUS BADGE - Sleek, minimalist, borderless (Spotify dark style)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFF181B21),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: _hasStopped
-                        ? const Color(0xFF10B981).withOpacity(0.4)
-                        : _isPaused
-                            ? const Color(0xFF334155)
-                            : const Color(0xFF262A34),
-                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -427,7 +423,6 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 decoration: BoxDecoration(
                   color: const Color(0xFF181B21),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF262A34)),
                 ),
                 child: Row(
                   children: [
@@ -456,9 +451,8 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E1719),
+                    color: const Color(0xFF26191B),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF991B1B).withOpacity(0.6)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -610,7 +604,6 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                   decoration: BoxDecoration(
                     color: const Color(0xFF181B21),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF262A34)),
                   ),
                   child: const Text(
                     'Gemini AI sedang mendengarkan audio rapat, menyaring obrolan candaan, dan merangkum keputusan penting beserta action items.',

@@ -29,6 +29,9 @@ class GeminiService {
           'maxOutputTokens': 10,
         }
       }),
+    ).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => throw Exception('Koneksi timeout. Periksa sambungan internet.'),
     );
 
     if (response.statusCode == 200) {
@@ -45,12 +48,13 @@ class GeminiService {
     }
   }
 
-  /// Proses audio rapat langsung ke multimodal Gemini AI
+  /// Proses audio rapat langsung ke multimodal Gemini AI dengan auto-fallback jika model sibuk
   static Future<MeetingNote> processMeetingAudio({
     required String audioPath,
     required int durationSeconds,
     required String apiKey,
     String model = 'gemini-3.5-flash-lite',
+    void Function(String status)? onProgress,
   }) async {
     final cleanKey = apiKey.trim();
     if (cleanKey.isEmpty) {
@@ -62,9 +66,68 @@ class GeminiService {
       throw Exception('File rekaman audio tidak ditemukan: $audioPath');
     }
 
+    onProgress?.call('Membaca file audio rekaman...');
     final bytes = await file.readAsBytes();
     final base64Audio = base64Encode(bytes);
 
+    // Daftar model untuk auto-fallback jika model utama sedang padat/503/429
+    final modelsToTry = <String>[model];
+    for (final candidate in ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']) {
+      if (!modelsToTry.contains(candidate)) {
+        modelsToTry.add(candidate);
+      }
+    }
+
+    String lastErrorMessage = '';
+
+    for (int i = 0; i < modelsToTry.length; i++) {
+      final currentModel = modelsToTry[i];
+      if (i > 0) {
+        onProgress?.call('Model sebelumnya padat. Beralih ke $currentModel...');
+        await Future.delayed(const Duration(seconds: 2));
+      } else {
+        onProgress?.call('Mengirim audio ke Gemini ($currentModel)...');
+      }
+
+      try {
+        final note = await _sendAudioToModel(
+          audioPath: audioPath,
+          durationSeconds: durationSeconds,
+          apiKey: cleanKey,
+          base64Audio: base64Audio,
+          model: currentModel,
+          onProgress: onProgress,
+        );
+        return note;
+      } catch (e) {
+        final errStr = e.toString().replaceAll('Exception: ', '');
+        lastErrorMessage = errStr;
+
+        final isRetryable = errStr.contains('high demand') ||
+            errStr.contains('503') ||
+            errStr.contains('429') ||
+            errStr.contains('RESOURCE_EXHAUSTED') ||
+            errStr.contains('temporarily unavailable') ||
+            errStr.contains('timeout') ||
+            errStr.contains('Deadline Exceeded');
+
+        if (!isRetryable || i == modelsToTry.length - 1) {
+          throw Exception(lastErrorMessage);
+        }
+      }
+    }
+
+    throw Exception(lastErrorMessage);
+  }
+
+  static Future<MeetingNote> _sendAudioToModel({
+    required String audioPath,
+    required int durationSeconds,
+    required String apiKey,
+    required String base64Audio,
+    required String model,
+    void Function(String status)? onProgress,
+  }) async {
     final prompt = '''
 Kamu adalah asisten sekretaris rapat eksekutif profesional untuk aplikasi HerzNote.
 Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
@@ -97,7 +160,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
 }
 ''';
 
-    final url = Uri.parse('$_baseUrl/$model:generateContent?key=$cleanKey');
+    final url = Uri.parse('$_baseUrl/$model:generateContent?key=$apiKey');
 
     final payload = {
       'contents': [
@@ -121,10 +184,15 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
       }
     };
 
+    onProgress?.call('Gemini AI sedang mendengarkan & menganalisis...');
+
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(payload),
+    ).timeout(
+      const Duration(seconds: 120),
+      onTimeout: () => throw Exception('Permintaan ke Gemini melebihi batas waktu (120 detik).'),
     );
 
     if (response.statusCode != 200) {
@@ -139,6 +207,8 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
       }
       throw Exception('Gemini API Error: $errorMessage');
     }
+
+    onProgress?.call('Menyusun notulensi, keputusan, & action items...');
 
     final responseData = jsonDecode(response.body);
     final candidates = responseData['candidates'] as List<dynamic>?;

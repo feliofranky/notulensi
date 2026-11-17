@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import '../models/meeting_note.dart';
@@ -21,16 +22,34 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
   int _secondsRecorded = 0;
   bool _isPaused = false;
   bool _isProcessing = false;
-  String _processingStep = 'Menyimpan rekaman...';
+  int _processingSeconds = 0;
+  Timer? _processingTimer;
+  String _processingStep = 'Menyimpan file audio rekaman...';
   String? _errorMessage;
+
+  String? _cachedAudioPath;
+  bool _hasStopped = false;
 
   StreamSubscription<Amplitude>? _amplitudeSub;
   double _currentAmplitude = -160.0;
   final List<double> _waveLevels = List.generate(24, (_) => 0.1);
 
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
+
   @override
   void initState() {
     super.initState();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
     _startRecordingFlow();
   }
 
@@ -45,7 +64,6 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
         if (mounted) {
           setState(() {
             _currentAmplitude = amp.current;
-            // Normalize amplitude (-60dB to 0dB -> 0.0 to 1.0)
             final normalized = ((amp.current + 60) / 60).clamp(0.05, 1.0).toDouble();
             _waveLevels.removeAt(0);
             _waveLevels.add(normalized);
@@ -83,34 +101,54 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
   }
 
   Future<void> _togglePause() async {
+    if (_hasStopped) return;
+
     if (_isPaused) {
       await _audioService.resume();
+      _pulseController.repeat(reverse: true);
       setState(() => _isPaused = false);
     } else {
       await _audioService.pause();
+      _pulseController.stop();
       setState(() => _isPaused = true);
     }
   }
 
   Future<void> _stopAndProcess() async {
-    _timer?.cancel();
-    _amplitudeSub?.cancel();
-
     final apiKey = await StorageService.getApiKey();
     if (apiKey.isEmpty) {
       _showMissingApiKeyDialog();
       return;
     }
 
+    _timer?.cancel();
+    _amplitudeSub?.cancel();
+
     setState(() {
       _isProcessing = true;
-      _processingStep = 'Menyimpan file audio rekaman...';
+      _errorMessage = null;
+      _processingSeconds = 0;
+      _processingStep = _hasStopped ? 'Menyiapkan berkas audio...' : 'Menyimpan file audio rekaman...';
+    });
+
+    _processingTimer?.cancel();
+    _processingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _isProcessing) {
+        setState(() {
+          _processingSeconds++;
+        });
+      }
     });
 
     try {
-      final audioPath = await _audioService.stop();
-      if (audioPath == null) {
-        throw Exception('File rekaman tidak tersimpan.');
+      // Hanya panggil stop() jika belum pernah distop sebelumnya (mencegah freeze/hang recorder)
+      if (!_hasStopped || _cachedAudioPath == null) {
+        final audioPath = await _audioService.stop();
+        if (audioPath == null || !File(audioPath).existsSync()) {
+          throw Exception('File rekaman audio tidak dapat disimpan.');
+        }
+        _cachedAudioPath = audioPath;
+        _hasStopped = true;
       }
 
       final model = await StorageService.getModel();
@@ -119,29 +157,21 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
         _processingStep = 'Mengirim audio ke Gemini AI ($model)...';
       });
 
-      // Update progress text after 2 seconds to keep user informed
-      Timer(const Duration(seconds: 3), () {
-        if (mounted && _isProcessing) {
-          setState(() {
-            _processingStep = 'Menyaring candaan & obrolan santai...';
-          });
-        }
-      });
-
-      Timer(const Duration(seconds: 7), () {
-        if (mounted && _isProcessing) {
-          setState(() {
-            _processingStep = 'Menyusun keputusan rapat & action items...';
-          });
-        }
-      });
-
       final note = await GeminiService.processMeetingAudio(
-        audioPath: audioPath,
+        audioPath: _cachedAudioPath!,
         durationSeconds: _secondsRecorded,
         apiKey: apiKey,
         model: model,
+        onProgress: (status) {
+          if (mounted && _isProcessing) {
+            setState(() {
+              _processingStep = status;
+            });
+          }
+        },
       );
+
+      _processingTimer?.cancel();
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -152,6 +182,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
         );
       }
     } catch (e) {
+      _processingTimer?.cancel();
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -167,14 +198,19 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF181B21),
-        title: const Text('API Key Diperlukan', style: TextStyle(color: Color(0xFFF1F5F9))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('API Key Diperlukan', style: TextStyle(color: Color(0xFFF1F5F9), fontWeight: FontWeight.bold)),
         content: const Text(
           'Anda belum mengisi API Key Gemini. Masukkan API Key agar HerzNote dapat memproses audio rapat Anda.',
           style: TextStyle(color: Color(0xFF94A3B8)),
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () {
               Navigator.pop(ctx);
               Navigator.push(
@@ -182,7 +218,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 MaterialPageRoute(builder: (_) => const SettingsScreen()),
               );
             },
-            child: const Text('Buka Pengaturan', style: TextStyle(color: Colors.white)),
+            child: const Text('Buka Pengaturan'),
           ),
         ],
       ),
@@ -194,20 +230,25 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF181B21),
-        title: const Text('Batalkan Rekaman?', style: TextStyle(color: Color(0xFFF1F5F9))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Batalkan Rekaman?', style: TextStyle(color: Color(0xFFF1F5F9), fontWeight: FontWeight.bold)),
         content: const Text(
-          'Audio yang sedang direkam akan dibuang dan tidak diproses.',
+          'Audio rapat yang telah direkam akan dibuang dan tidak diproses.',
           style: TextStyle(color: Color(0xFF94A3B8)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Lanjutkan Rapat', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text('Lanjutkan Rekaman', style: TextStyle(color: Color(0xFF94A3B8))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ya, Batalkan', style: TextStyle(color: Colors.white)),
+            child: const Text('Ya, Batalkan'),
           ),
         ],
       ),
@@ -216,7 +257,16 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
     if (confirm == true) {
       _timer?.cancel();
       _amplitudeSub?.cancel();
-      await _audioService.stop();
+      _processingTimer?.cancel();
+      if (!_hasStopped) {
+        await _audioService.stop();
+      }
+      if (_cachedAudioPath != null) {
+        try {
+          final f = File(_cachedAudioPath!);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
       if (mounted) {
         Navigator.pop(context);
       }
@@ -227,6 +277,8 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
   void dispose() {
     _timer?.cancel();
     _amplitudeSub?.cancel();
+    _processingTimer?.cancel();
+    _pulseController.dispose();
     _audioService.dispose();
     super.dispose();
   }
@@ -240,7 +292,10 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
     return Scaffold(
       backgroundColor: const Color(0xFF0F1115),
       appBar: AppBar(
-        title: const Text('Perekaman Rapat'),
+        title: const Text(
+          'Perekaman Rapat',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+        ),
         backgroundColor: const Color(0xFF181B21),
         foregroundColor: const Color(0xFFF1F5F9),
         elevation: 0,
@@ -256,42 +311,73 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
             children: [
               const Spacer(),
 
-              // STATUS BADGE
+              // STATUS BADGE - Sleek, minimalist & elegant (Matching Home Screen style)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: _isPaused ? const Color(0xFF334155) : const Color(0xFF7F1D1D).withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0xFF181B21),
+                  borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: _isPaused ? const Color(0xFF64748B) : const Color(0xFFDC2626),
+                    color: _hasStopped
+                        ? const Color(0xFF10B981).withOpacity(0.4)
+                        : _isPaused
+                            ? const Color(0xFF334155)
+                            : const Color(0xFF262A34),
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: _isPaused ? const Color(0xFF94A3B8) : const Color(0xFFEF4444),
-                        shape: BoxShape.circle,
+                    FadeTransition(
+                      opacity: _isPaused || _hasStopped ? const AlwaysStoppedAnimation(1.0) : _pulseAnimation,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: _hasStopped
+                              ? const Color(0xFF10B981)
+                              : _isPaused
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_hasStopped
+                                      ? const Color(0xFF10B981)
+                                      : _isPaused
+                                          ? const Color(0xFFF59E0B)
+                                          : const Color(0xFFEF4444))
+                                  .withOpacity(0.5),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Text(
-                      _isPaused ? 'REKAMAN DIJEDA' : 'SEDANG MEREKAM RAPAT...',
+                      _hasStopped
+                          ? 'REKAMAN TERSIMPAN'
+                          : _isPaused
+                              ? 'REKAMAN DIJEDA'
+                              : 'MEREKAM RAPAT',
                       style: TextStyle(
-                        color: _isPaused ? const Color(0xFFCBD5E1) : const Color(0xFFFCA5A5),
+                        color: _hasStopped
+                            ? const Color(0xFFA7F3D0)
+                            : _isPaused
+                                ? const Color(0xFFCBD5E1)
+                                : const Color(0xFFF1F5F9),
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.1,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
                       ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
 
               // TIMER COUNTER
               Text(
@@ -299,9 +385,9 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 style: const TextStyle(
                   color: Color(0xFFF1F5F9),
                   fontSize: 54,
-                  fontWeight: FontWeight.w300,
+                  fontWeight: FontWeight.w200,
                   fontFamily: 'monospace',
-                  letterSpacing: 2,
+                  letterSpacing: 3,
                 ),
               ),
 
@@ -315,13 +401,17 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: List.generate(_waveLevels.length, (idx) {
-                    final height = _isPaused ? 8.0 : (_waveLevels[idx] * 64).clamp(6.0, 64.0).toDouble();
+                    final height = (_isPaused || _hasStopped)
+                        ? 8.0
+                        : (_waveLevels[idx] * 64).clamp(6.0, 64.0).toDouble();
                     return Container(
                       width: 5,
                       height: height,
                       margin: const EdgeInsets.symmetric(horizontal: 3),
                       decoration: BoxDecoration(
-                        color: _isPaused ? const Color(0xFF475569) : const Color(0xFF10B981),
+                        color: (_isPaused || _hasStopped)
+                            ? const Color(0xFF334155)
+                            : const Color(0xFF10B981),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     );
@@ -329,41 +419,90 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // GUIDANCE TIP
+              // GUIDANCE TIP CARD
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: const Color(0xFF181B21),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFF262A34)),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.info_outline, size: 18, color: Color(0xFF10B981)),
-                    const SizedBox(width: 10),
-                    Expanded(
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.mic, size: 16, color: Color(0xFF10B981)),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
                       child: Text(
                         'Taruh HP di tengah meja rapat. HerzNote akan merekam terus tanpa terputus.',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.4),
                       ),
                     ),
                   ],
                 ),
               ),
 
+              // ERROR MESSAGE CARD (Clean, dismissible & with retry button)
               if (_errorMessage != null) ...[
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF7F1D1D),
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFF1E1719),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF991B1B).withOpacity(0.6)),
                   ),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Color(0xFFFECACA), fontSize: 13),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.error_outline, size: 18, color: Color(0xFFF87171)),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Gagal Membuat Notulensi',
+                              style: TextStyle(
+                                color: Color(0xFFFCA5A5),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 16, color: Color(0xFF94A3B8)),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => setState(() => _errorMessage = null),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Color(0xFFFECACA), fontSize: 12, height: 1.4),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _stopAndProcess,
+                          icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF10B981)),
+                          label: const Text(
+                            'Coba Lagi Sekarang',
+                            style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -374,33 +513,34 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  // PAUSE / RESUME BUTTON
-                  IconButton.filled(
-                    onPressed: _togglePause,
-                    icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause, size: 28),
-                    style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFF262A34),
-                      foregroundColor: const Color(0xFFF1F5F9),
-                      padding: const EdgeInsets.all(18),
+                  // PAUSE / RESUME BUTTON (Hanya aktif jika belum dihentikan)
+                  if (!_hasStopped)
+                    IconButton.filled(
+                      onPressed: _togglePause,
+                      icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause, size: 28),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFF262A34),
+                        foregroundColor: const Color(0xFFF1F5F9),
+                        padding: const EdgeInsets.all(18),
+                      ),
                     ),
-                  ),
 
                   // STOP & PROCESS BUTTON
                   SizedBox(
-                    height: 64,
+                    height: 60,
                     child: ElevatedButton.icon(
                       onPressed: _stopAndProcess,
-                      icon: const Icon(Icons.stop, size: 26),
-                      label: const Text(
-                        'Selesai & Buat Notulensi',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      icon: Icon(_hasStopped ? Icons.auto_awesome : Icons.stop, size: 24),
+                      label: Text(
+                        _hasStopped ? 'Coba Buat Notulensi Lagi' : 'Selesai & Buat Notulensi',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF10B981),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(32),
+                          borderRadius: BorderRadius.circular(30),
                         ),
                         elevation: 0,
                       ),
@@ -409,7 +549,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 ],
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -423,50 +563,81 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.all(32.0),
+            padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
+                const Spacer(),
+
+                // LOADING SPINNER
+                Container(
+                  width: 72,
+                  height: 72,
+                  padding: const EdgeInsets.all(8),
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 3.5,
                     color: Color(0xFF10B981),
                   ),
                 ),
+
                 const SizedBox(height: 32),
+
                 const Text(
                   'Memproses Rapat...',
                   style: TextStyle(
                     color: Color(0xFFF1F5F9),
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 12),
+
+                const SizedBox(height: 10),
+
                 Text(
-                  _processingStep,
+                  '$_processingStep (${_processingSeconds}s)',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Color(0xFF10B981),
                     fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 24),
+
+                const SizedBox(height: 28),
+
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: const Color(0xFF181B21),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: const Color(0xFF262A34)),
                   ),
                   child: const Text(
-                    'Gemini AI sedang mendengarkan rekaman rapat, menyaring obrolan candaan, dan merangkum keputusan rapat beserta action items.',
+                    'Gemini AI sedang mendengarkan audio rapat, menyaring obrolan candaan, dan merangkum keputusan penting beserta action items.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.5),
                   ),
                 ),
+
+                const Spacer(),
+
+                // CANCEL BUTTON (So user is never stuck!)
+                TextButton.icon(
+                  onPressed: () {
+                    _processingTimer?.cancel();
+                    setState(() {
+                      _isProcessing = false;
+                      _errorMessage = 'Pemrosesan dibatalkan. Anda dapat mencoba lagi kapan saja.';
+                    });
+                  },
+                  icon: const Icon(Icons.arrow_back, size: 16, color: Color(0xFF94A3B8)),
+                  label: const Text(
+                    'Batalkan & Kembali',
+                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
               ],
             ),
           ),

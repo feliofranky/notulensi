@@ -73,9 +73,23 @@ class AudioService {
       await _recordingChannel.invokeMethod('stopRecordingService');
     } catch (_) {}
 
-    final path = await _recorder.stop();
-    _currentPath = path;
-    return path;
+    try {
+      final isRec = await _recorder.isRecording();
+      final isPsd = await _recorder.isPaused();
+      if (isRec || isPsd) {
+        final path = await _recorder.stop().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => _currentPath,
+        );
+        if (path != null && path.isNotEmpty) {
+          _currentPath = path;
+        }
+      }
+    } catch (e) {
+      // In case native recorder was already stopped, preserve _currentPath
+    }
+
+    return _currentPath;
   }
 
   Future<bool> isRecording() async {

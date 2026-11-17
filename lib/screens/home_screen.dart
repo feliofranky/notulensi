@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/meeting_note.dart';
+import '../services/pdf_service.dart';
 import '../services/storage_service.dart';
 import 'recording_screen.dart';
 import 'result_screen.dart';
@@ -322,6 +323,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             onSelected: (val) {
                               if (val == 'copy') _copyWa(note);
+                              if (val == 'pdf') PdfService.showPdfOptionsSheet(context, note);
                               if (val == 'delete') _deleteNote(note);
                             },
                             itemBuilder: (context) => [
@@ -332,6 +334,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     Icon(Icons.copy, size: 16, color: Color(0xFF34D399)),
                                     SizedBox(width: 8),
                                     Text('Salin Format WA', style: TextStyle(color: Color(0xFFF1F5F9))),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'pdf',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.picture_as_pdf_outlined, size: 16, color: Color(0xFF93C5FD)),
+                                    SizedBox(width: 8),
+                                    Text('Ekspor PDF', style: TextStyle(color: Color(0xFFF1F5F9))),
                                   ],
                                 ),
                               ),

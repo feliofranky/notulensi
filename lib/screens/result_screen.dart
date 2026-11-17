@@ -52,16 +52,7 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
   Future<void> _exportPdf() async {
     setState(() => _isExportingPdf = true);
     try {
-      await PdfService.generateAndSharePdf(_note);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFEF4444),
-            content: Text('Gagal mengekspor PDF: ${e.toString().replaceAll("Exception: ", "")}'),
-          ),
-        );
-      }
+      await PdfService.showPdfOptionsSheet(context, _note);
     } finally {
       if (mounted) {
         setState(() => _isExportingPdf = false);
@@ -361,7 +352,9 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -378,8 +371,7 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                                       ),
                                     ),
                                   ),
-                                  if (item.deadline != '-') ...[
-                                    const SizedBox(width: 8),
+                                  if (item.deadline != '-')
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
@@ -394,7 +386,22 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                                         ),
                                       ),
                                     ),
-                                  ],
+                                  if (item.isCompleted)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F291E),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'Selesai',
+                                        style: TextStyle(
+                                          color: Color(0xFF10B981),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ],
@@ -420,6 +427,7 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
             ),
             child: Text(
               _note.summary.trim().isEmpty ? 'Tidak ada ringkasan pembahasan.' : _note.summary.trim(),
+              textAlign: TextAlign.justify,
               style: const TextStyle(
                 color: Color(0xFFF1F5F9),
                 fontSize: 14,
@@ -436,6 +444,9 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
 
   Widget _buildDiscussionFlowView() {
     final text = _note.transcript.trim();
+    final paragraphs = text.isEmpty
+        ? <String>[]
+        : text.split(RegExp(r'\n+')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -449,11 +460,11 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
-                const Icon(Icons.timeline, size: 16, color: Color(0xFF10B981)),
-                const SizedBox(width: 8),
-                const Text(
+                Icon(Icons.timeline, size: 16, color: Color(0xFF10B981)),
+                SizedBox(width: 8),
+                Text(
                   'KRONOLOGI & ALUR RAPAT',
                   style: TextStyle(
                     fontSize: 12,
@@ -465,15 +476,52 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
               ],
             ),
             const SizedBox(height: 14),
-            Text(
-              text.isEmpty ? 'Alur pembahasan tidak tersedia.' : text,
-              style: const TextStyle(
-                color: Color(0xFFCBD5E1),
-                fontSize: 14,
-                height: 1.7,
-                letterSpacing: 0.2,
-              ),
-            ),
+            if (paragraphs.isEmpty)
+              const Text(
+                'Alur pembahasan tidak tersedia.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+              )
+            else
+              ...paragraphs.map((pText) {
+                final sectionMatch = RegExp(r'^(\d+\.\s+[^:\n]{2,50}:)\s*(.*)$').firstMatch(pText);
+                if (sectionMatch != null) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: RichText(
+                      textAlign: TextAlign.justify,
+                      text: TextSpan(
+                        style: const TextStyle(
+                          color: Color(0xFFCBD5E1),
+                          fontSize: 14,
+                          height: 1.7,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${sectionMatch.group(1)!} ',
+                            style: const TextStyle(
+                              color: Color(0xFFF1F5F9),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          TextSpan(text: sectionMatch.group(2) ?? ''),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    pText,
+                    textAlign: TextAlign.justify,
+                    style: const TextStyle(
+                      color: Color(0xFFCBD5E1),
+                      fontSize: 14,
+                      height: 1.7,
+                    ),
+                  ),
+                );
+              }),
           ],
         ),
       ),

@@ -97,7 +97,8 @@ class MeetingNote {
       for (int i = 0; i < actionItems.length; i++) {
         final item = actionItems[i];
         final dl = item.deadline != '-' ? ' (Deadline: ${item.deadline})' : '';
-        buffer.writeln('${i + 1}. [${item.pic}] ${item.task}$dl');
+        final status = item.isCompleted ? ' [Selesai]' : '';
+        buffer.writeln('${i + 1}. [${item.pic}] ${item.task}$dl$status');
       }
       buffer.writeln('');
     }

@@ -18,8 +18,10 @@ class StorageService {
   }
 
   static Future<void> setApiKey(String key) async {
+    final clean = key.replaceAll(RegExp(r'\s+'), '').trim();
+    if (clean.contains('•')) return; // Never overwrite valid key with masked bullets
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyApiKey, key.trim());
+    await prefs.setString(_keyApiKey, clean);
   }
 
   // Model

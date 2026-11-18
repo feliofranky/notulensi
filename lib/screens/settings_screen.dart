@@ -14,6 +14,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   String _rawApiKey = '';
   bool _isEditingKey = false;
+  int _prevInputLen = 0;
 
   String _selectedModel = StorageService.defaultModel;
   int _selectedSampleRate = 16000;
@@ -53,7 +54,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  /// Sensor API Key: tampilkan maksimal 10 karakter awal, sisanya jadi titik tebal
+  /// Ekstrak API Key bersih secara cerdas (menangani spasi/enter atau copy 2 baris sekaligus)
+  String _extractCleanKey(String input) {
+    final lines = input
+        .split(RegExp(r'[\r\n]+'))
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+
+    for (final line in lines) {
+      if (line.startsWith('AQ.') || line.startsWith('AIza')) {
+        return line.replaceAll(RegExp(r'\s+'), '');
+      }
+    }
+    return input.replaceAll(RegExp(r'\s+'), '').trim();
+  }
+
+  /// Sensor API Key hanya untuk tampilan: 10 karakter awal + titik tebal
   String _maskApiKey(String key) {
     final trimmed = key.trim();
     if (trimmed.isEmpty) return '';
@@ -65,15 +82,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final key = await StorageService.getApiKey();
+    final savedKey = await StorageService.getApiKey();
+    final cleanSaved = savedKey.contains('•') ? '' : _extractCleanKey(savedKey);
     final model = await StorageService.getModel();
     final rate = await StorageService.getSampleRate();
 
     if (mounted) {
       setState(() {
-        _rawApiKey = key;
-        _isEditingKey = key.isEmpty;
-        _apiKeyController.text = key.isEmpty ? '' : _maskApiKey(key);
+        _rawApiKey = cleanSaved;
+        _isEditingKey = cleanSaved.isEmpty;
+        _apiKeyController.clear();
+        _prevInputLen = 0;
         _selectedModel = model;
         _selectedSampleRate = rate;
         _isLoading = false;
@@ -82,48 +101,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _handleKeyInputChanged(String val) {
-    final trimmed = val.trim();
-    if (trimmed.isEmpty) {
-      _rawApiKey = '';
-      return;
-    }
+    final delta = val.length - _prevInputLen;
+    _prevInputLen = val.length;
 
-    // Jika user baru saja paste atau mengetik key utuh (belum mengandung bullet sensor)
-    if (!trimmed.contains('•') && trimmed.length >= 16) {
-      _rawApiKey = trimmed;
-      final masked = _maskApiKey(trimmed);
-      _apiKeyController.value = TextEditingValue(
-        text: masked,
-        selection: TextSelection.collapsed(offset: masked.length),
-      );
+    final cleaned = _extractCleanKey(val);
+    _rawApiKey = cleaned;
+
+    // Jika user baru saja melakukan paste key utuh (lonjakan >= 15 karakter sekaligus),
+    // langsung ubah ke tampilan kartu tersensor tanpa memodifikasi buffer TextField!
+    if (delta >= 15 && cleaned.length >= 20) {
+      FocusScope.of(context).unfocus();
+      setState(() {
+        _isEditingKey = false;
+        _apiKeyController.clear();
+        _prevInputLen = 0;
+        _testSuccess = null;
+        _testStatusText = null;
+      });
+    } else {
       setState(() {
         _testSuccess = null;
         _testStatusText = null;
       });
-    } else if (!trimmed.contains('•')) {
-      _rawApiKey = trimmed;
     }
   }
 
   Future<void> _pasteFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final pasted = data?.text?.trim() ?? '';
+    final pasted = _extractCleanKey(data?.text ?? '');
     if (pasted.isNotEmpty) {
-      _rawApiKey = pasted;
-      final masked = _maskApiKey(pasted);
+      FocusScope.of(context).unfocus();
       setState(() {
-        _apiKeyController.value = TextEditingValue(
-          text: masked,
-          selection: TextSelection.collapsed(offset: masked.length),
-        );
+        _rawApiKey = pasted;
+        _isEditingKey = false;
+        _apiKeyController.clear();
+        _prevInputLen = 0;
         _testSuccess = null;
         _testStatusText = null;
       });
     }
+  }
+
+  String _getEffectiveKey() {
+    if (_isEditingKey && _apiKeyController.text.trim().isNotEmpty) {
+      return _extractCleanKey(_apiKeyController.text);
+    }
+    return _rawApiKey.trim();
   }
 
   Future<void> _testConnection() async {
-    final keyToTest = _rawApiKey.trim();
+    final keyToTest = _getEffectiveKey();
     if (keyToTest.isEmpty) {
       setState(() {
         _testSuccess = false;
@@ -150,7 +177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           _testSuccess = false;
-          _testStatusText = 'Gagal terhubung';
+          _testStatusText = e.toString().replaceAll('Exception: ', '');
         });
       }
     } finally {
@@ -163,7 +190,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
-    await StorageService.setApiKey(_rawApiKey.trim());
+    final keyToSave = _getEffectiveKey();
+    await StorageService.setApiKey(keyToSave);
     await StorageService.setModel(_selectedModel);
     await StorageService.setSampleRate(_selectedSampleRate);
 
@@ -258,6 +286,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     setState(() {
                                       _isEditingKey = true;
                                       _apiKeyController.clear();
+                                      _prevInputLen = 0;
                                       _testSuccess = null;
                                       _testStatusText = null;
                                     });
@@ -280,9 +309,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ] else ...[
-                          // MODE GANTI KEY (Langsung tersensor begitu di-paste)
+                          // MODE INPUT KEY BARU (Native obscureText agar key 100% utuh & aman)
                           TextField(
                             controller: _apiKeyController,
+                            obscureText: true,
+                            obscuringCharacter: '•',
+                            autocorrect: false,
+                            enableSuggestions: false,
                             onChanged: _handleKeyInputChanged,
                             style: const TextStyle(
                               color: Color(0xFFF1F5F9),
@@ -314,6 +347,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       onPressed: () {
                                         setState(() {
                                           _apiKeyController.clear();
+                                          _prevInputLen = 0;
                                           _rawApiKey = '';
                                           _testSuccess = null;
                                           _testStatusText = null;
@@ -362,9 +396,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   _testStatusText!,
                                   style: TextStyle(
                                     color: _testSuccess! ? const Color(0xFF10B981) : const Color(0xFFF87171),
-                                    fontSize: 13,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),

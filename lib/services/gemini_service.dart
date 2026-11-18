@@ -6,36 +6,35 @@ import '../models/meeting_note.dart';
 class GeminiService {
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  /// Uji keabsahan API Key dengan request ringan
+  /// Uji keabsahan API Key dengan endpoint ringan /models (cepat, 0 token, kebal 503 high demand)
   static Future<bool> testApiKey(String apiKey, {String model = 'gemini-3.5-flash-lite'}) async {
-    final cleanKey = apiKey.trim();
+    final cleanKey = apiKey.replaceAll(RegExp(r'\s+'), '').trim();
     if (cleanKey.isEmpty) {
-      throw Exception('API Key Gemini tidak boleh kosong.');
+      throw Exception('API Key kosong.');
+    }
+    if (cleanKey.contains('•')) {
+      throw Exception('API Key rusak. Klik Ganti Key & tempel ulang.');
     }
 
-    final url = Uri.parse('$_baseUrl/$model:generateContent?key=$cleanKey');
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'contents': [
-          {
-            'parts': [
-              {'text': 'Halo, jawab hanya kata "OK"'}
-            ]
-          }
-        ],
-        'generationConfig': {
-          'maxOutputTokens': 10,
-        }
-      }),
-    ).timeout(
-      const Duration(seconds: 15),
-      onTimeout: () => throw Exception('Koneksi timeout. Periksa sambungan internet.'),
-    );
+    final url = Uri.parse('$_baseUrl?key=$cleanKey');
+    http.Response response;
+    try {
+      response = await http.get(url).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('Koneksi timeout. Cek internet.'),
+      );
+    } on SocketException {
+      throw Exception('Tidak ada koneksi internet.');
+    }
 
     if (response.statusCode == 200) {
       return true;
+    } else if (response.statusCode == 400 || response.statusCode == 401) {
+      throw Exception('API Key tidak valid.');
+    } else if (response.statusCode == 403) {
+      throw Exception('Akses API Key ditolak (403).');
+    } else if (response.statusCode == 429 || response.statusCode == 503) {
+      throw Exception('Server Gemini sedang sibuk (${response.statusCode}).');
     } else {
       String errorMsg = 'Error ${response.statusCode}';
       try {
@@ -44,7 +43,7 @@ class GeminiService {
           errorMsg = errJson['error']['message'];
         }
       } catch (_) {}
-      throw Exception('Gagal terhubung ke Gemini: $errorMsg');
+      throw Exception(errorMsg);
     }
   }
 
@@ -56,9 +55,12 @@ class GeminiService {
     String model = 'gemini-3.5-flash-lite',
     void Function(String status)? onProgress,
   }) async {
-    final cleanKey = apiKey.trim();
+    final cleanKey = apiKey.replaceAll(RegExp(r'\s+'), '').trim();
     if (cleanKey.isEmpty) {
       throw Exception('API Key belum diisi. Silakan atur di menu Pengaturan.');
+    }
+    if (cleanKey.contains('•')) {
+      throw Exception('API Key perlu diinput ulang di Pengaturan (klik Ganti Key).');
     }
 
     final file = File(audioPath);

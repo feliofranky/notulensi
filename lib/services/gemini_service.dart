@@ -68,11 +68,11 @@ class GeminiService {
       throw Exception('File rekaman audio tidak ditemukan: $audioPath');
     }
 
-    onProgress?.call('Membaca file audio rekaman...');
+    onProgress?.call('Menyiapkan berkas audio...');
     final bytes = await file.readAsBytes();
     final base64Audio = base64Encode(bytes);
 
-    // Daftar model untuk auto-fallback jika model utama sedang padat/503/429
+    // Daftar model untuk auto-fallback jika server utama sedang padat/503/429
     final modelsToTry = <String>[model];
     for (final candidate in ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']) {
       if (!modelsToTry.contains(candidate)) {
@@ -85,10 +85,10 @@ class GeminiService {
     for (int i = 0; i < modelsToTry.length; i++) {
       final currentModel = modelsToTry[i];
       if (i > 0) {
-        onProgress?.call('Model sebelumnya padat. Beralih ke $currentModel...');
+        onProgress?.call('Server sedang sibuk, beralih ke jalur cadangan...');
         await Future.delayed(const Duration(seconds: 2));
       } else {
-        onProgress?.call('Mengirim audio ke Gemini ($currentModel)...');
+        onProgress?.call('Mengirim audio untuk diproses...');
       }
 
       try {
@@ -102,16 +102,17 @@ class GeminiService {
         );
         return note;
       } catch (e) {
-        final errStr = e.toString().replaceAll('Exception: ', '');
-        lastErrorMessage = errStr;
+        final rawErr = e.toString();
+        final safeErr = _sanitizeError(rawErr);
+        lastErrorMessage = safeErr;
 
-        final isRetryable = errStr.contains('high demand') ||
-            errStr.contains('503') ||
-            errStr.contains('429') ||
-            errStr.contains('RESOURCE_EXHAUSTED') ||
-            errStr.contains('temporarily unavailable') ||
-            errStr.contains('timeout') ||
-            errStr.contains('Deadline Exceeded');
+        final isRetryable = rawErr.contains('high demand') ||
+            rawErr.contains('503') ||
+            rawErr.contains('429') ||
+            rawErr.contains('RESOURCE_EXHAUSTED') ||
+            rawErr.contains('temporarily unavailable') ||
+            rawErr.contains('timeout') ||
+            rawErr.contains('Deadline Exceeded');
 
         if (!isRetryable || i == modelsToTry.length - 1) {
           throw Exception(lastErrorMessage);
@@ -120,6 +121,33 @@ class GeminiService {
     }
 
     throw Exception(lastErrorMessage);
+  }
+
+  /// Pastikan API Key & URL mentah tidak akan pernah bocor ke layar error
+  static String _sanitizeError(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('connection abort') ||
+        lower.contains('connection closed') ||
+        lower.contains('connection reset') ||
+        lower.contains('broken pipe') ||
+        lower.contains('socketexception') ||
+        lower.contains('failed host lookup')) {
+      return 'Koneksi internet terputus saat memproses audio. Pastikan sinyal stabil lalu tekan Coba Lagi.';
+    }
+    if (lower.contains('high demand') || lower.contains('503')) {
+      return 'Server AI sedang mengalami lonjakan trafik sementara. Silakan coba lagi sebentar lagi.';
+    }
+    if (lower.contains('429') || lower.contains('resource_exhausted')) {
+      return 'Batas kuota permintaan sementara tercapai. Tunggu beberapa saat lalu coba lagi.';
+    }
+    if (lower.contains('401') || lower.contains('api key not valid')) {
+      return 'API Key tidak valid. Silakan periksa kembali di menu Pengaturan.';
+    }
+    // Hapus semua potongan URL / query parameter yang berpotensi mengandung API key
+    var cleaned = raw.replaceAll('Exception: ', '');
+    cleaned = cleaned.replaceAll(RegExp(r'key=[^\s,&\)]+'), 'key=[SENSOR]');
+    cleaned = cleaned.replaceAll(RegExp(r',?\s*uri=https?://[^\s\)]+'), '');
+    return cleaned.trim();
   }
 
   static Future<MeetingNote> _sendAudioToModel({
@@ -131,21 +159,26 @@ class GeminiService {
     void Function(String status)? onProgress,
   }) async {
     final prompt = '''
-Kamu adalah asisten sekretaris rapat eksekutif profesional untuk aplikasi HerzNote.
-Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
+Kamu adalah asisten notulensi rapat eksekutif profesional.
+Tugasmu menganalisis rekaman audio percakapan rapat ini secara akurat:
+
+0. ATURAN ANTI-HALUSINASI (WAJIB):
+   - Jika rekaman audio kosong, hening, hanya berisi suara latar/noise, atau tidak ada percakapan manusia yang dapat dipahami, DILARANG KERAS mengarang, menebak, atau membuat-buat isi rapat!
+   - Untuk kondisi tersebut, kembalikan JSON dengan "is_empty_audio": true, serta string kosong untuk title/summary/transcript dan array kosong untuk decisions/action_items.
 
 1. TRANSKRIPSI & BAHASA:
    - Dengarkan seluruh percakapan. Percakapan mungkin bercampur bahasa Indonesia, bahasa daerah, istilah teknis, dan gaya santai.
-   - Pahami maksud utama pembicara dan terjemahkan/rapikan ke dalam bahasa Indonesia formal yang baik tanpa mengubah esensi.
+   - Pahami maksud utama pembicara dan rapikan ke dalam bahasa Indonesia formal yang baik tanpa mengubah esensi.
 
-2. PENYARINGAN CERDAS (SMART FILTERING):
-   - Abaikan dan buang semua candaan, gurauan santai, obrolan ngopi/makan, dan filler words ("anu", "nganu", "apa namanya", "hmmm") yang tidak relevan dengan pekerjaan.
+2. PENYARINGAN CERDAS:
+   - Abaikan candaan, obrolan santai tidak relevan, dan filler words ("anu", "nganu", "apa namanya", "hmmm").
    - Fokuskan analisis pada esensi rapat, kesepakatan, argumen kunci, dan tanggung jawab tugas.
-   - DILARANG menggunakan emoji apa pun pada semua teks output. Gunakan teks bersih dan profesional.
+   - DILARANG menggunakan emoji apa pun pada semua teks output.
 
 3. KELUARAN WAJIB JSON:
    Keluarkan HANYA JSON valid sesuai format ini:
 {
+  "is_empty_audio": false,
   "title": "Topik atau Judul Utama Rapat yang Ringkas dan Jelas (tanpa emoji)",
   "summary": "Ringkasan eksekutif jalannya rapat dalam 1-3 paragraf padat tentang latar belakang, pembahasan utama, dan kesimpulan.",
   "decisions": [
@@ -159,7 +192,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
       "deadline": "Batas waktu tugas (contoh: 'Jumat ini', '25 Nov', atau '-' jika tidak ada)"
     }
   ],
-  "transcript": "Alur pembahasan rapat yang terstruktur rapi secara kronologis, dibagi menjadi bagian-bagian berurutan (misal: 1. Pembukaan & Agenda, 2. Paparan Utama, 3. Diskusi & Pertimbangan, 4. Arahan & Penutup) dengan narasi dan poin-poin yang mudah dipahami."
+  "transcript": "Alur pembahasan rapat yang terstruktur rapi secara kronologis, dibagi menjadi bagian-bagian berurutan (misal: 1. Pembukaan & Agenda, 2. Paparan Utama, 3. Diskusi & Pertimbangan, 4. Arahan & Penutup) dengan narasi yang jelas dan mudah dibaca."
 }
 ''';
 
@@ -182,12 +215,12 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
         }
       ],
       'generationConfig': {
-        'temperature': 0.2,
+        'temperature': 0.1,
         'responseMimeType': 'application/json',
       }
     };
 
-    onProgress?.call('Gemini AI sedang mendengarkan & menganalisis...');
+    onProgress?.call('Menganalisis percakapan & menyaring poin penting...');
 
     final response = await http.post(
       url,
@@ -195,7 +228,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
       body: jsonEncode(payload),
     ).timeout(
       const Duration(seconds: 120),
-      onTimeout: () => throw Exception('Permintaan ke Gemini melebihi batas waktu (120 detik).'),
+      onTimeout: () => throw Exception('Permintaan melebihi batas waktu (120 detik). Silakan coba lagi.'),
     );
 
     if (response.statusCode != 200) {
@@ -208,7 +241,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
       } catch (_) {
         errorMessage = response.body;
       }
-      throw Exception('Gemini API Error: $errorMessage');
+      throw Exception('Error server: $errorMessage');
     }
 
     onProgress?.call('Menyusun notulensi, keputusan, & action items...');
@@ -216,7 +249,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
     final responseData = jsonDecode(response.body);
     final candidates = responseData['candidates'] as List<dynamic>?;
     if (candidates == null || candidates.isEmpty) {
-      throw Exception('Gemini tidak memberikan jawaban untuk audio ini.');
+      throw Exception('Sistem tidak menerima hasil analisis untuk audio ini.');
     }
 
     final rawText = candidates[0]['content']?['parts']?[0]?['text'] as String? ?? '';
@@ -248,59 +281,67 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini dengan sangat teliti:
     }
     cleaned = cleaned.trim();
 
+    Map<String, dynamic>? parsedMap;
     try {
       final startIndex = cleaned.indexOf('{');
       final endIndex = cleaned.lastIndexOf('}');
       if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
         final jsonSub = cleaned.substring(startIndex, endIndex + 1);
-        final map = jsonDecode(jsonSub);
-
-        final title = (map['title'] ?? 'Rapat HerzNote').toString();
-        final summary = (map['summary'] ?? '').toString();
-
-        final decisions = <String>[];
-        if (map['decisions'] is List) {
-          for (var item in map['decisions']) {
-            decisions.add(item.toString());
-          }
-        }
-
-        final actionItems = <ActionItem>[];
-        if (map['action_items'] is List) {
-          for (var item in map['action_items']) {
-            if (item is Map) {
-              actionItems.add(ActionItem(
-                task: (item['task'] ?? '').toString(),
-                pic: (item['pic'] ?? 'Tim').toString(),
-                deadline: (item['deadline'] ?? '-').toString(),
-              ));
-            } else {
-              actionItems.add(ActionItem(
-                task: item.toString(),
-                pic: 'Tim',
-                deadline: '-',
-              ));
-            }
-          }
-        }
-
-        final transcript = (map['transcript'] ?? '').toString();
-
-        return MeetingNote(
-          id: noteId,
-          title: title,
-          date: now,
-          durationSeconds: durationSeconds,
-          audioPath: audioPath,
-          summary: summary,
-          decisions: decisions,
-          actionItems: actionItems,
-          transcript: transcript,
-          rawResponse: rawText,
-        );
+        parsedMap = Map<String, dynamic>.from(jsonDecode(jsonSub));
       }
     } catch (_) {
-      // Fallback below
+      parsedMap = null;
+    }
+
+    if (parsedMap != null) {
+      final isEmptyAudio = parsedMap['is_empty_audio'] == true;
+      final title = (parsedMap['title'] ?? '').toString().trim();
+      final summary = (parsedMap['summary'] ?? '').toString().trim();
+
+      if (isEmptyAudio || (title.isEmpty && summary.isEmpty)) {
+        throw Exception('Tidak ada percakapan yang terdeteksi dalam rekaman audio ini.');
+      }
+
+      final decisions = <String>[];
+      if (parsedMap['decisions'] is List) {
+        for (var item in parsedMap['decisions']) {
+          decisions.add(item.toString());
+        }
+      }
+
+      final actionItems = <ActionItem>[];
+      if (parsedMap['action_items'] is List) {
+        for (var item in parsedMap['action_items']) {
+          if (item is Map) {
+            actionItems.add(ActionItem(
+              task: (item['task'] ?? '').toString(),
+              pic: (item['pic'] ?? 'Tim').toString(),
+              deadline: (item['deadline'] ?? '-').toString(),
+            ));
+          } else {
+            actionItems.add(ActionItem(
+              task: item.toString(),
+              pic: 'Tim',
+              deadline: '-',
+            ));
+          }
+        }
+      }
+
+      final transcript = (parsedMap['transcript'] ?? '').toString();
+
+      return MeetingNote(
+        id: noteId,
+        title: title.isEmpty ? 'Notulensi Rapat' : title,
+        date: now,
+        durationSeconds: durationSeconds,
+        audioPath: audioPath,
+        summary: summary,
+        decisions: decisions,
+        actionItems: actionItems,
+        transcript: transcript,
+        rawResponse: rawText,
+      );
     }
 
     // Fallback jika model menjawab dalam format teks biasa

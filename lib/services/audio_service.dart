@@ -67,11 +67,22 @@ class AudioService {
     }
   }
 
-  Future<String?> stop() async {
-    // Release screen awake & stop Foreground Service
+  Future<void> ensureKeepAwake() async {
+    try {
+      await _recordingChannel.invokeMethod('startRecordingService');
+    } catch (_) {}
+  }
+
+  Future<void> releaseKeepAwake() async {
     try {
       await _recordingChannel.invokeMethod('stopRecordingService');
     } catch (_) {}
+  }
+
+  Future<String?> stop({bool releaseService = true}) async {
+    if (releaseService) {
+      await releaseKeepAwake();
+    }
 
     try {
       final isRec = await _recorder.isRecording();

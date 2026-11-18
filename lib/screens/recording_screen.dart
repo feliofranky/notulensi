@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import '../models/meeting_note.dart';
@@ -24,7 +25,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
   bool _isProcessing = false;
   int _processingSeconds = 0;
   Timer? _processingTimer;
-  String _processingStep = 'Menyimpan file audio rekaman...';
+  String _processingStep = 'Menyimpan berkas audio...';
   String? _errorMessage;
 
   String? _cachedAudioPath;
@@ -32,7 +33,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
 
   StreamSubscription<Amplitude>? _amplitudeSub;
   double _currentAmplitude = -160.0;
-  final List<double> _waveLevels = List.generate(24, (_) => 0.1);
+  final List<double> _waveLevels = List.generate(24, (_) => 0.0);
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -64,9 +65,12 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
         if (mounted) {
           setState(() {
             _currentAmplitude = amp.current;
-            final normalized = ((amp.current + 60) / 60).clamp(0.05, 1.0).toDouble();
+            // Noise gate di -44 dB agar saat hening bar tetap pendek halus,
+            // dan saat ada suara berbicara langsung melompat hidup & responsif
+            final raw = ((amp.current + 44) / 40).clamp(0.0, 1.0).toDouble();
+            final shaped = math.pow(raw, 1.6).toDouble();
             _waveLevels.removeAt(0);
-            _waveLevels.add(normalized);
+            _waveLevels.add(shaped);
           });
         }
       });
@@ -121,6 +125,14 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       return;
     }
 
+    // Cegah pengiriman rekaman terlalu singkat (< 5 detik) yang rentan kosong
+    if (!_hasStopped && _secondsRecorded < 5) {
+      setState(() {
+        _errorMessage = 'Durasi rekaman terlalu singkat (minimal 5 detik) untuk menyusun notulensi.';
+      });
+      return;
+    }
+
     _timer?.cancel();
     _amplitudeSub?.cancel();
 
@@ -128,7 +140,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       _isProcessing = true;
       _errorMessage = null;
       _processingSeconds = 0;
-      _processingStep = _hasStopped ? 'Menyiapkan berkas audio...' : 'Menyimpan file audio rekaman...';
+      _processingStep = _hasStopped ? 'Menyiapkan berkas audio...' : 'Menyimpan berkas audio...';
     });
 
     _processingTimer?.cancel();
@@ -141,9 +153,12 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
     });
 
     try {
+      // Pastikan layar & CPU tetap terjaga selama upload + pemrosesan AI agar koneksi tidak terputus
+      await _audioService.ensureKeepAwake();
+
       // Hanya panggil stop() jika belum pernah distop sebelumnya (mencegah freeze/hang recorder)
       if (!_hasStopped || _cachedAudioPath == null) {
-        final audioPath = await _audioService.stop();
+        final audioPath = await _audioService.stop(releaseService: false);
         if (audioPath == null || !File(audioPath).existsSync()) {
           throw Exception('File rekaman audio tidak dapat disimpan.');
         }
@@ -154,7 +169,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       final model = await StorageService.getModel();
 
       setState(() {
-        _processingStep = 'Mengirim audio ke Gemini AI ($model)...';
+        _processingStep = 'Mengirim audio untuk dianalisis...';
       });
 
       final note = await GeminiService.processMeetingAudio(
@@ -176,6 +191,9 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       // Simpan langsung ke database lokal HP agar history langsung ter-update
       await StorageService.saveNote(note);
 
+      // Lepaskan WakeLock & Keep-Screen-On setelah seluruh proses tuntas
+      await _audioService.releaseKeepAwake();
+
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -186,6 +204,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       }
     } catch (e) {
       _processingTimer?.cancel();
+      await _audioService.releaseKeepAwake();
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -357,7 +376,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                           ? 'REKAMAN TERSIMPAN'
                           : _isPaused
                               ? 'REKAMAN DIJEDA'
-                              : 'MEREKAM RAPAT',
+                              : 'SEDANG MEREKAM',
                       style: TextStyle(
                         color: _hasStopped
                             ? const Color(0xFFA7F3D0)
@@ -389,7 +408,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
 
               const SizedBox(height: 32),
 
-              // AUDIO SOUNDWAVE BARS
+              // AUDIO SOUNDWAVE BARS (Quiet baseline rendah 4px, responsif melompat saat ada suara)
               Container(
                 height: 80,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -398,9 +417,11 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: List.generate(_waveLevels.length, (idx) {
                     final height = (_isPaused || _hasStopped)
-                        ? 8.0
-                        : (_waveLevels[idx] * 64).clamp(6.0, 64.0).toDouble();
-                    return Container(
+                        ? 4.0
+                        : (4.0 + (_waveLevels[idx] * 64.0)).clamp(4.0, 68.0).toDouble();
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 90),
+                      curve: Curves.easeOut,
                       width: 5,
                       height: height,
                       margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -437,7 +458,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'Taruh HP di tengah meja rapat. HerzNote akan merekam terus tanpa terputus.',
+                        'Posisikan perangkat di tengah meja atau dekat sumber suara untuk tangkapan audio optimal.',
                         style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.4),
                       ),
                     ),
@@ -577,7 +598,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 const SizedBox(height: 32),
 
                 const Text(
-                  'Memproses Rapat...',
+                  'Menyusun Notulensi...',
                   style: TextStyle(
                     color: Color(0xFFF1F5F9),
                     fontSize: 22,
@@ -606,7 +627,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Text(
-                    'Gemini AI sedang mendengarkan audio rapat, menyaring obrolan candaan, dan merangkum keputusan penting beserta action items.',
+                    'Sistem sedang menganalisis rekaman, menyaring percakapan, dan merangkum poin keputusan beserta tindak lanjutnya secara otomatis.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.5),
                   ),
@@ -618,6 +639,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 TextButton.icon(
                   onPressed: () {
                     _processingTimer?.cancel();
+                    _audioService.releaseKeepAwake();
                     setState(() {
                       _isProcessing = false;
                       _errorMessage = 'Pemrosesan dibatalkan. Anda dapat mencoba lagi kapan saja.';

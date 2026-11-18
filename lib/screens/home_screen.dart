@@ -136,11 +136,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'HerzNote',
+              'HERZnote',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 20,
                 color: Color(0xFFF1F5F9),
+                letterSpacing: 0.4,
               ),
             ),
             Text(
@@ -213,15 +214,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openRecording,
-        backgroundColor: const Color(0xFF10B981),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        icon: const Icon(Icons.mic, size: 20),
-        label: const Text(
-          'Mulai Rekam Rapat',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 14, right: 4),
+        child: SizedBox(
+          height: 46,
+          child: FloatingActionButton.extended(
+            onPressed: _openRecording,
+            backgroundColor: const Color(0xFF10B981),
+            foregroundColor: Colors.white,
+            elevation: 2,
+            extendedPadding: const EdgeInsets.symmetric(horizontal: 18),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            icon: const Icon(Icons.mic, size: 18),
+            label: const Text(
+              'Mulai Rekam',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+            ),
+          ),
         ),
       ),
     );
@@ -257,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Taruh HP di tengah meja rapat dan tekan tombol "Mulai Rekam Rapat" di bawah saat rapat dimulai.',
+              'Posisikan perangkat di tengah meja dan tekan tombol "Mulai Rekam" saat rapat dimulai.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Color(0xFF94A3B8),
@@ -277,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       backgroundColor: const Color(0xFF181B21),
       onRefresh: _refreshData,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
         itemCount: _notes.length,
         itemBuilder: (ctx, idx) {
           final note = _notes[idx];

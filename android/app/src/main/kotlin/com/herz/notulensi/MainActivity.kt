@@ -29,6 +29,7 @@ class MainActivity : FlutterActivity() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var loadedAudioPath: String? = null
+    private var currentPlaybackSpeed: Float = 1.0f
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -136,6 +137,10 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "play" -> {
                     val path = call.argument<String>("path")
+                    val speedArg = call.argument<Double>("speed")
+                    if (speedArg != null) {
+                        currentPlaybackSpeed = speedArg.toFloat().coerceIn(0.5f, 2.5f)
+                    }
                     if (path.isNullOrEmpty()) {
                         result.error("INVALID_PATH", "Path audio kosong", null)
                         return@setMethodCallHandler
@@ -149,11 +154,36 @@ class MainActivity : FlutterActivity() {
                             mediaPlayer = mp
                             loadedAudioPath = path
                         }
-                        mediaPlayer?.start()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            mediaPlayer?.let { mp ->
+                                mp.playbackParams = mp.playbackParams.setSpeed(currentPlaybackSpeed)
+                            }
+                        }
+                        if (mediaPlayer?.isPlaying != true) {
+                            mediaPlayer?.start()
+                        }
                         result.success(getPlayerStatus())
                     } catch (e: Exception) {
                         releasePlayer()
                         result.error("PLAY_ERROR", e.message ?: "Gagal memutar audio", null)
+                    }
+                }
+                "setSpeed" -> {
+                    val speedArg = call.argument<Double>("speed") ?: 1.0
+                    currentPlaybackSpeed = speedArg.toFloat().coerceIn(0.5f, 2.5f)
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            mediaPlayer?.let { mp ->
+                                val wasPlaying = mp.isPlaying
+                                mp.playbackParams = mp.playbackParams.setSpeed(currentPlaybackSpeed)
+                                if (!wasPlaying && mp.isPlaying) {
+                                    mp.pause()
+                                }
+                            }
+                        }
+                        result.success(getPlayerStatus())
+                    } catch (e: Exception) {
+                        result.success(getPlayerStatus())
                     }
                 }
                 "pause" -> {

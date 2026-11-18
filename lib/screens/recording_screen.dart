@@ -30,6 +30,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
 
   String? _cachedAudioPath;
   bool _hasStopped = false;
+  int _processGeneration = 0;
 
   StreamSubscription<Amplitude>? _amplitudeSub;
   double _currentAmplitude = -160.0;
@@ -136,6 +137,8 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
     _timer?.cancel();
     _amplitudeSub?.cancel();
 
+    final int myGen = ++_processGeneration;
+
     setState(() {
       _isProcessing = true;
       _errorMessage = null;
@@ -145,7 +148,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
 
     _processingTimer?.cancel();
     _processingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _isProcessing) {
+      if (mounted && _isProcessing && myGen == _processGeneration) {
         setState(() {
           _processingSeconds++;
         });
@@ -166,11 +169,15 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
         _hasStopped = true;
       }
 
+      if (myGen != _processGeneration) return;
+
       final model = await StorageService.getModel();
 
-      setState(() {
-        _processingStep = 'Mengirim audio untuk dianalisis...';
-      });
+      if (mounted && myGen == _processGeneration) {
+        setState(() {
+          _processingStep = 'Mengirim audio untuk dianalisis...';
+        });
+      }
 
       final note = await GeminiService.processMeetingAudio(
         audioPath: _cachedAudioPath!,
@@ -178,13 +185,16 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
         apiKey: apiKey,
         model: model,
         onProgress: (status) {
-          if (mounted && _isProcessing) {
+          if (mounted && _isProcessing && myGen == _processGeneration) {
             setState(() {
               _processingStep = status;
             });
           }
         },
       );
+
+      // Jika user sudah membatalkan proses di tengah jalan, abaikan hasil lama ini sepenuhnya
+      if (myGen != _processGeneration) return;
 
       _processingTimer?.cancel();
 
@@ -194,7 +204,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
       // Lepaskan WakeLock & Keep-Screen-On setelah seluruh proses tuntas
       await _audioService.releaseKeepAwake();
 
-      if (mounted) {
+      if (mounted && myGen == _processGeneration) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -203,6 +213,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
         );
       }
     } catch (e) {
+      if (myGen != _processGeneration) return;
       _processingTimer?.cancel();
       await _audioService.releaseKeepAwake();
       if (mounted) {
@@ -248,6 +259,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
   }
 
   Future<void> _saveAsDraft() async {
+    _processGeneration++;
     _timer?.cancel();
     _amplitudeSub?.cancel();
     _processingTimer?.cancel();
@@ -602,38 +614,44 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
 
               const Spacer(),
 
-              // CONTROLS
+              // CONTROLS (Sleek & Compact)
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // PAUSE / RESUME BUTTON (Hanya aktif jika belum dihentikan)
-                  if (!_hasStopped)
-                    IconButton.filled(
-                      onPressed: _togglePause,
-                      icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause, size: 28),
-                      style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFF262A34),
-                        foregroundColor: const Color(0xFFF1F5F9),
-                        padding: const EdgeInsets.all(18),
+                  if (!_hasStopped) ...[
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton.filled(
+                        onPressed: _togglePause,
+                        icon: Icon(_isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFF262A34),
+                          foregroundColor: const Color(0xFFF1F5F9),
+                          padding: EdgeInsets.zero,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 12),
+                  ],
 
                   // STOP & PROCESS BUTTON
                   SizedBox(
-                    height: 60,
+                    height: 48,
                     child: ElevatedButton.icon(
                       onPressed: _stopAndProcess,
-                      icon: Icon(_hasStopped ? Icons.auto_awesome : Icons.stop, size: 24),
+                      icon: Icon(_hasStopped ? Icons.auto_awesome : Icons.stop_rounded, size: 20),
                       label: Text(
                         _hasStopped ? 'Coba Buat Notulensi Lagi' : 'Selesai & Buat Notulensi',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF10B981),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+                          borderRadius: BorderRadius.circular(24),
                         ),
                         elevation: 0,
                       ),
@@ -642,7 +660,7 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 ],
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
             ],
           ),
         ),
@@ -716,11 +734,12 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                 // CANCEL BUTTON (So user is never stuck!)
                 TextButton.icon(
                   onPressed: () {
+                    _processGeneration++;
                     _processingTimer?.cancel();
                     _audioService.releaseKeepAwake();
                     setState(() {
                       _isProcessing = false;
-                      _errorMessage = 'Pemrosesan dibatalkan. Anda dapat mencoba lagi kapan saja.';
+                      _errorMessage = null;
                     });
                   },
                   icon: const Icon(Icons.arrow_back, size: 16, color: Color(0xFF94A3B8)),

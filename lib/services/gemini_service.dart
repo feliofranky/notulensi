@@ -74,9 +74,9 @@ class GeminiService {
     final bytes = await file.readAsBytes();
     final base64Audio = base64Encode(bytes);
 
-    // Daftar model untuk auto-fallback jika server utama sedang padat/503/429
+    // Daftar model aktif untuk auto-fallback jika server utama sedang padat/503/429
     final modelsToTry = <String>[model];
-    for (final candidate in ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']) {
+    for (final candidate in ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.8-flash']) {
       if (!modelsToTry.contains(candidate)) {
         modelsToTry.add(candidate);
       }
@@ -113,6 +113,8 @@ class GeminiService {
         final isRetryable = rawErr.contains('high demand') ||
             rawErr.contains('503') ||
             rawErr.contains('429') ||
+            rawErr.contains('404') ||
+            rawErr.contains('no longer available') ||
             rawErr.contains('RESOURCE_EXHAUSTED') ||
             rawErr.contains('temporarily unavailable') ||
             rawErr.contains('timeout') ||

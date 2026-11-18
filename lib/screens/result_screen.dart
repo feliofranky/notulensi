@@ -33,6 +33,8 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
   bool _isPlaying = false;
   int _positionMs = 0;
   int _durationMs = 0;
+  double _playbackSpeed = 1.0;
+  static const List<double> _speedOptions = [1.0, 1.25, 1.5, 2.0];
   Timer? _playerTimer;
 
   @override
@@ -75,7 +77,10 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
         _applyPlayerStatus(status);
         _playerTimer?.cancel();
       } else {
-        final status = await _playerChannel.invokeMethod<Map<dynamic, dynamic>>('play', {'path': path});
+        final status = await _playerChannel.invokeMethod<Map<dynamic, dynamic>>(
+          'play',
+          {'path': path, 'speed': _playbackSpeed},
+        );
         _applyPlayerStatus(status);
         _startPlayerPolling();
       }
@@ -89,6 +94,21 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
         );
       }
     }
+  }
+
+  Future<void> _cyclePlaybackSpeed() async {
+    final nextIdx = (_speedOptions.indexOf(_playbackSpeed) + 1) % _speedOptions.length;
+    final nextSpeed = _speedOptions[nextIdx];
+    setState(() => _playbackSpeed = nextSpeed);
+    try {
+      await _playerChannel.invokeMethod('setSpeed', {'speed': nextSpeed});
+    } catch (_) {}
+  }
+
+  String _formatSpeedLabel(double speed) {
+    if (speed == 1.0) return '1x';
+    if (speed == 2.0) return '2x';
+    return '${speed}x';
   }
 
   void _startPlayerPolling() {
@@ -496,7 +516,7 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
             unselectedLabelColor: const Color(0xFF94A3B8),
             labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             tabs: const [
-              Tab(text: 'Notulensi Rapi'),
+              Tab(text: 'Notulensi'),
               Tab(text: 'Alur Pembahasan'),
             ],
           ),
@@ -870,13 +890,38 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Rekaman Audio Asli',
-                  style: TextStyle(
-                    color: Color(0xFFF1F5F9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Rekaman Audio Asli',
+                      style: TextStyle(
+                        color: Color(0xFFF1F5F9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: _cyclePlaybackSpeed,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _playbackSpeed > 1.0 ? const Color(0xFF0F291E) : const Color(0xFF262A34),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _formatSpeedLabel(_playbackSpeed),
+                          style: TextStyle(
+                            color: _playbackSpeed > 1.0 ? const Color(0xFF10B981) : const Color(0xFFF1F5F9),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(

@@ -47,13 +47,15 @@ class GeminiService {
     }
   }
 
-  /// Proses audio rapat langsung ke multimodal Gemini AI dengan auto-fallback jika model sibuk
+  /// Proses audio rapat langsung ke multimodal AI dengan auto-fallback jika server sibuk
   static Future<MeetingNote> processMeetingAudio({
     required String audioPath,
     required int durationSeconds,
     required String apiKey,
     String model = 'gemini-3.5-flash-lite',
     void Function(String status)? onProgress,
+    String? existingId,
+    DateTime? existingDate,
   }) async {
     final cleanKey = apiKey.replaceAll(RegExp(r'\s+'), '').trim();
     if (cleanKey.isEmpty) {
@@ -65,7 +67,7 @@ class GeminiService {
 
     final file = File(audioPath);
     if (!await file.exists()) {
-      throw Exception('File rekaman audio tidak ditemukan: $audioPath');
+      throw Exception('File rekaman audio tidak ditemukan.');
     }
 
     onProgress?.call('Menyiapkan berkas audio...');
@@ -99,6 +101,8 @@ class GeminiService {
           base64Audio: base64Audio,
           model: currentModel,
           onProgress: onProgress,
+          existingId: existingId,
+          existingDate: existingDate,
         );
         return note;
       } catch (e) {
@@ -150,6 +154,18 @@ class GeminiService {
     return cleaned.trim();
   }
 
+  static String _detectMimeType(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.wav')) return 'audio/wav';
+    if (lower.endsWith('.mp3')) return 'audio/mp3';
+    if (lower.endsWith('.m4a') || lower.endsWith('.mp4')) return 'audio/mp4';
+    if (lower.endsWith('.ogg') || lower.endsWith('.opus')) return 'audio/ogg';
+    if (lower.endsWith('.flac')) return 'audio/flac';
+    if (lower.endsWith('.aac')) return 'audio/aac';
+    if (lower.endsWith('.amr') || lower.endsWith('.3gp')) return 'audio/amr';
+    return 'audio/mp4';
+  }
+
   static Future<MeetingNote> _sendAudioToModel({
     required String audioPath,
     required int durationSeconds,
@@ -157,6 +173,8 @@ class GeminiService {
     required String base64Audio,
     required String model,
     void Function(String status)? onProgress,
+    String? existingId,
+    DateTime? existingDate,
   }) async {
     final prompt = '''
 Kamu adalah asisten notulensi rapat eksekutif profesional.
@@ -204,7 +222,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini secara akurat:
           'parts': [
             {
               'inlineData': {
-                'mimeType': audioPath.endsWith('.wav') ? 'audio/wav' : 'audio/aac',
+                'mimeType': _detectMimeType(audioPath),
                 'data': base64Audio,
               }
             },
@@ -257,6 +275,8 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini secara akurat:
       rawText: rawText,
       audioPath: audioPath,
       durationSeconds: durationSeconds,
+      existingId: existingId,
+      existingDate: existingDate,
     );
   }
 
@@ -265,9 +285,11 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini secara akurat:
     required String rawText,
     required String audioPath,
     required int durationSeconds,
+    String? existingId,
+    DateTime? existingDate,
   }) {
-    final noteId = DateTime.now().millisecondsSinceEpoch.toString();
-    final now = DateTime.now();
+    final noteId = existingId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final now = existingDate ?? DateTime.now();
 
     String cleaned = rawText.trim();
     if (cleaned.startsWith('```json')) {

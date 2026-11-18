@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:intl/intl.dart';
 
 class ActionItem {
-  final String task;
-  final String pic;
-  final String deadline;
+  String task;
+  String pic;
+  String deadline;
   bool isCompleted;
 
   ActionItem({
@@ -35,11 +35,12 @@ class MeetingNote {
   final DateTime date;
   final int durationSeconds;
   final String? audioPath;
-  final String summary;
-  final List<String> decisions;
-  final List<ActionItem> actionItems;
-  final String transcript;
+  String summary;
+  List<String> decisions;
+  List<ActionItem> actionItems;
+  String transcript;
   final String rawResponse;
+  bool isDraft;
 
   MeetingNote({
     required this.id,
@@ -52,6 +53,7 @@ class MeetingNote {
     required this.actionItems,
     required this.transcript,
     this.rawResponse = '',
+    this.isDraft = false,
   });
 
   String get formattedDuration {
@@ -120,6 +122,7 @@ class MeetingNote {
         'actionItems': actionItems.map((e) => e.toJson()).toList(),
         'transcript': transcript,
         'rawResponse': rawResponse,
+        'isDraft': isDraft,
       };
 
   factory MeetingNote.fromJson(Map<String, dynamic> json) => MeetingNote(
@@ -141,5 +144,6 @@ class MeetingNote {
             [],
         transcript: json['transcript'] ?? '',
         rawResponse: json['rawResponse'] ?? '',
+        isDraft: json['isDraft'] ?? false,
       );
 }

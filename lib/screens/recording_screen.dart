@@ -247,41 +247,107 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
     );
   }
 
+  Future<void> _saveAsDraft() async {
+    _timer?.cancel();
+    _amplitudeSub?.cancel();
+    _processingTimer?.cancel();
+
+    String? audioPath = _cachedAudioPath;
+    if (!_hasStopped || audioPath == null) {
+      audioPath = await _audioService.stop(releaseService: true);
+      _cachedAudioPath = audioPath;
+      _hasStopped = true;
+    } else {
+      await _audioService.releaseKeepAwake();
+    }
+
+    if (audioPath != null && File(audioPath).existsSync()) {
+      final now = DateTime.now();
+      final draft = MeetingNote(
+        id: now.millisecondsSinceEpoch.toString(),
+        title: 'Draft Rekaman Rapat',
+        date: now,
+        durationSeconds: _secondsRecorded,
+        audioPath: audioPath,
+        summary: '',
+        decisions: [],
+        actionItems: [],
+        transcript: '',
+        isDraft: true,
+      );
+      await StorageService.saveNote(draft);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF181B21),
+            content: Text('Rekaman disimpan ke Draft. Anda dapat memprosesnya kapan saja.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } else if (mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   Future<void> _cancelRecording() async {
-    final confirm = await showDialog<bool>(
+    final canDraft = _hasStopped || _secondsRecorded >= 5;
+    final action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF181B21),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Batalkan Rekaman?', style: TextStyle(color: Color(0xFFF1F5F9), fontWeight: FontWeight.bold)),
-        content: const Text(
-          'Audio rapat yang telah direkam akan dibuang dan tidak diproses.',
-          style: TextStyle(color: Color(0xFF94A3B8)),
+        title: Text(
+          canDraft ? 'Keluar dari Rekaman?' : 'Batalkan Rekaman?',
+          style: const TextStyle(color: Color(0xFFF1F5F9), fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          canDraft
+              ? 'Anda bisa menyimpan rekaman ini ke Draft untuk diproses nanti saat sinyal stabil, atau membuangnya permanen.'
+              : 'Audio rapat yang telah direkam akan dibuang dan tidak diproses.',
+          style: const TextStyle(color: Color(0xFF94A3B8), height: 1.4),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Lanjutkan Rekaman', style: TextStyle(color: Color(0xFF94A3B8))),
+            onPressed: () => Navigator.pop(ctx, 'stay'),
+            child: const Text('Batal', style: TextStyle(color: Color(0xFF94A3B8))),
           ),
+          if (canDraft)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(ctx, 'draft'),
+              child: const Text('Simpan Draft'),
+            ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
               foregroundColor: Colors.white,
+              elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ya, Batalkan'),
+            onPressed: () => Navigator.pop(ctx, 'discard'),
+            child: const Text('Buang'),
           ),
         ],
       ),
     );
 
-    if (confirm == true) {
+    if (action == 'draft') {
+      await _saveAsDraft();
+    } else if (action == 'discard') {
       _timer?.cancel();
       _amplitudeSub?.cancel();
       _processingTimer?.cancel();
       if (!_hasStopped) {
         await _audioService.stop();
+      } else {
+        await _audioService.releaseKeepAwake();
       }
       if (_cachedAudioPath != null) {
         try {
@@ -506,16 +572,28 @@ class _RecordingScreenState extends State<RecordingScreen> with TickerProviderSt
                         style: const TextStyle(color: Color(0xFFFECACA), fontSize: 12, height: 1.4),
                       ),
                       const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: _stopAndProcess,
-                          icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF10B981)),
-                          label: const Text(
-                            'Coba Lagi Sekarang',
-                            style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (_hasStopped)
+                            TextButton.icon(
+                              onPressed: _saveAsDraft,
+                              icon: const Icon(Icons.bookmark_border, size: 15, color: Color(0xFF94A3B8)),
+                              label: const Text(
+                                'Simpan ke Draft',
+                                style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.w600, fontSize: 12),
+                              ),
+                            ),
+                          const SizedBox(width: 4),
+                          TextButton.icon(
+                            onPressed: _stopAndProcess,
+                            icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF10B981)),
+                            label: const Text(
+                              'Coba Lagi',
+                              style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),

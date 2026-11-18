@@ -1,32 +1,43 @@
 package com.herz.notulensi
 
+import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
+import android.media.MediaMetadataRetriever
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 
-class MainActivity: FlutterActivity() {
+class MainActivity : FlutterActivity() {
     private val RECORDING_CHANNEL = "com.herz.notulensi/recording"
     private val FILES_CHANNEL = "com.herz.notulensi/files"
+    private val PLAYER_CHANNEL = "com.herz.notulensi/audio_player"
+
+    private val REQ_PICK_AUDIO = 4091
+    private var pendingAudioPickResult: MethodChannel.Result? = null
+    private var pendingAudioDestDir: String? = null
+
+    private var mediaPlayer: MediaPlayer? = null
+    private var loadedAudioPath: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // 1. Recording Foreground Service & WakeLock Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, RECORDING_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startRecordingService" -> {
-                    // 1. Keep screen on while recording so it doesn't sleep automatically on the table
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-                    // 2. Start Foreground Service so microphone stays unmuted if user manually turns off screen
                     val intent = Intent(this, RecordingForegroundService::class.java).apply {
                         action = RecordingForegroundService.ACTION_START
                     }
@@ -38,10 +49,7 @@ class MainActivity: FlutterActivity() {
                     result.success(true)
                 }
                 "stopRecordingService" -> {
-                    // 1. Restore normal screen timeout
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-                    // 2. Stop Foreground Service
                     val intent = Intent(this, RecordingForegroundService::class.java).apply {
                         action = RecordingForegroundService.ACTION_STOP
                     }
@@ -52,11 +60,12 @@ class MainActivity: FlutterActivity() {
             }
         }
 
+        // 2. Files Channel (Save PDF to Download, Open PDF, Pick External Audio)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "savePdfToDownloads" -> {
                     val filePath = call.argument<String>("filePath")
-                    val fileName = call.argument<String>("fileName") ?: "Notulensi_HerzNote.pdf"
+                    val fileName = call.argument<String>("fileName") ?: "Notulensi_HERZnote.pdf"
                     if (filePath.isNullOrEmpty()) {
                         result.error("INVALID_ARGS", "Path file PDF kosong", null)
                         return@setMethodCallHandler
@@ -87,8 +96,201 @@ class MainActivity: FlutterActivity() {
                         result.error("OPEN_ERROR", e.message ?: "Tidak ada aplikasi pembuka PDF", null)
                     }
                 }
+                "pickAudioFile" -> {
+                    if (pendingAudioPickResult != null) {
+                        result.error("ALREADY_ACTIVE", "Pemilih file sedang terbuka", null)
+                        return@setMethodCallHandler
+                    }
+                    pendingAudioDestDir = call.argument<String>("destDir")
+                    pendingAudioPickResult = result
+                    try {
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "audio/*"
+                            putExtra(
+                                Intent.EXTRA_MIME_TYPES,
+                                arrayOf(
+                                    "audio/*",
+                                    "application/ogg",
+                                    "audio/ogg",
+                                    "audio/opus",
+                                    "audio/mpeg",
+                                    "audio/mp4",
+                                    "audio/x-wav",
+                                    "audio/wav"
+                                )
+                            )
+                        }
+                        startActivityForResult(intent, REQ_PICK_AUDIO)
+                    } catch (e: Exception) {
+                        pendingAudioPickResult = null
+                        result.error("PICK_ERROR", e.message ?: "Gagal membuka pemilih audio", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
+        }
+
+        // 3. Native Mini Audio Player Channel (Zero extra plugins, plays WAV/MP3/M4A/OGG/OPUS)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PLAYER_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "play" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("INVALID_PATH", "Path audio kosong", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        if (mediaPlayer == null || loadedAudioPath != path) {
+                            releasePlayer()
+                            val mp = MediaPlayer()
+                            mp.setDataSource(path)
+                            mp.prepare()
+                            mediaPlayer = mp
+                            loadedAudioPath = path
+                        }
+                        mediaPlayer?.start()
+                        result.success(getPlayerStatus())
+                    } catch (e: Exception) {
+                        releasePlayer()
+                        result.error("PLAY_ERROR", e.message ?: "Gagal memutar audio", null)
+                    }
+                }
+                "pause" -> {
+                    try {
+                        if (mediaPlayer?.isPlaying == true) {
+                            mediaPlayer?.pause()
+                        }
+                        result.success(getPlayerStatus())
+                    } catch (e: Exception) {
+                        result.success(getPlayerStatus())
+                    }
+                }
+                "seek" -> {
+                    val posMs = call.argument<Int>("positionMs") ?: 0
+                    try {
+                        mediaPlayer?.seekTo(posMs)
+                        result.success(getPlayerStatus())
+                    } catch (e: Exception) {
+                        result.success(getPlayerStatus())
+                    }
+                }
+                "getStatus" -> {
+                    result.success(getPlayerStatus())
+                }
+                "stop" -> {
+                    releasePlayer()
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun getPlayerStatus(): Map<String, Any> {
+        val mp = mediaPlayer ?: return mapOf("isPlaying" to false, "positionMs" to 0, "durationMs" to 0)
+        return try {
+            mapOf(
+                "isPlaying" to mp.isPlaying,
+                "positionMs" to mp.currentPosition,
+                "durationMs" to mp.duration
+            )
+        } catch (_: Exception) {
+            mapOf("isPlaying" to false, "positionMs" to 0, "durationMs" to 0)
+        }
+    }
+
+    private fun releasePlayer() {
+        try {
+            mediaPlayer?.stop()
+        } catch (_: Exception) {}
+        try {
+            mediaPlayer?.release()
+        } catch (_: Exception) {}
+        mediaPlayer = null
+        loadedAudioPath = null
+    }
+
+    override fun onDestroy() {
+        releasePlayer()
+        super.onDestroy()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK_AUDIO) {
+            val callback = pendingAudioPickResult
+            val destDirStr = pendingAudioDestDir
+            pendingAudioPickResult = null
+            pendingAudioDestDir = null
+
+            if (callback == null) return
+
+            if (resultCode != Activity.RESULT_OK || data?.data == null) {
+                callback.success(null)
+                return
+            }
+
+            val uri = data.data!!
+            try {
+                val displayName = queryDisplayName(uri) ?: "audio_import.m4a"
+                val ext = extractExtension(displayName)
+                val targetDir = if (!destDirStr.isNullOrEmpty()) File(destDirStr) else File(filesDir, "recordings")
+                if (!targetDir.exists()) targetDir.mkdirs()
+
+                val destFile = File(targetDir, "import_${System.currentTimeMillis()}$ext")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: throw Exception("Tidak dapat membaca file audio yang dipilih")
+
+                val durationSec = extractAudioDurationSeconds(destFile.absolutePath)
+                callback.success(
+                    mapOf(
+                        "path" to destFile.absolutePath,
+                        "name" to displayName,
+                        "durationSeconds" to durationSec
+                    )
+                )
+            } catch (e: Exception) {
+                callback.error("IMPORT_ERROR", e.message ?: "Gagal mengimpor file audio", null)
+            }
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractExtension(name: String): String {
+        val dot = name.lastIndexOf('.')
+        if (dot != -1 && dot < name.length - 1) {
+            val ext = name.substring(dot).lowercase()
+            if (ext.length in 2..6) return ext
+        }
+        return ".m4a"
+    }
+
+    private fun extractAudioDurationSeconds(filePath: String): Int {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(filePath)
+            val durStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            val durMs = durStr?.toLongOrNull() ?: 0L
+            (durMs / 1000L).toInt().coerceAtLeast(1)
+        } catch (_: Exception) {
+            0
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {}
         }
     }
 

@@ -35,6 +35,11 @@ class MeetingNote {
   final DateTime date;
   final int durationSeconds;
   final String? audioPath;
+  List<String> agenda;
+  String location;
+  String leader;
+  String notetaker;
+  String participants;
   String summary;
   List<String> decisions;
   List<ActionItem> actionItems;
@@ -48,6 +53,11 @@ class MeetingNote {
     required this.date,
     required this.durationSeconds,
     this.audioPath,
+    this.agenda = const [],
+    this.location = '',
+    this.leader = '',
+    this.notetaker = '',
+    this.participants = '',
     required this.summary,
     required this.decisions,
     required this.actionItems,
@@ -77,11 +87,31 @@ class MeetingNote {
     buffer.writeln('*NOTULENSI RAPAT: ${title.toUpperCase()}*');
     buffer.writeln('Tanggal: $dateStr');
     buffer.writeln('Durasi Rekaman: $formattedDuration');
+    if (location.trim().isNotEmpty) {
+      buffer.writeln('Tempat/Media: ${location.trim()}');
+    }
+    if (leader.trim().isNotEmpty) {
+      buffer.writeln('Pimpinan Rapat: ${leader.trim()}');
+    }
+    if (notetaker.trim().isNotEmpty) {
+      buffer.writeln('Notulis: ${notetaker.trim()}');
+    }
+    if (participants.trim().isNotEmpty) {
+      buffer.writeln('Peserta Hadir: ${participants.trim()}');
+    }
     buffer.writeln('─────────────────────────');
     buffer.writeln('');
 
+    if (agenda.isNotEmpty) {
+      buffer.writeln('*AGENDA RAPAT:*');
+      for (int i = 0; i < agenda.length; i++) {
+        buffer.writeln('${i + 1}. ${agenda[i]}');
+      }
+      buffer.writeln('');
+    }
+
     if (summary.trim().isNotEmpty) {
-      buffer.writeln('*RINGKASAN EKSEKUTIF:*');
+      buffer.writeln('*RINGKASAN PEMBAHASAN:*');
       buffer.writeln(summary.trim());
       buffer.writeln('');
     }
@@ -117,6 +147,11 @@ class MeetingNote {
         'date': date.toIso8601String(),
         'durationSeconds': durationSeconds,
         'audioPath': audioPath,
+        'agenda': agenda,
+        'location': location,
+        'leader': leader,
+        'notetaker': notetaker,
+        'participants': participants,
         'summary': summary,
         'decisions': decisions,
         'actionItems': actionItems.map((e) => e.toJson()).toList(),
@@ -133,6 +168,15 @@ class MeetingNote {
             : DateTime.now(),
         durationSeconds: json['durationSeconds'] ?? 0,
         audioPath: json['audioPath'],
+        agenda: (json['agenda'] as List<dynamic>?)
+                ?.map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .toList() ??
+            [],
+        location: (json['location'] ?? '').toString(),
+        leader: (json['leader'] ?? '').toString(),
+        notetaker: (json['notetaker'] ?? '').toString(),
+        participants: (json['participants'] ?? '').toString(),
         summary: json['summary'] ?? '',
         decisions: (json['decisions'] as List<dynamic>?)
                 ?.map((e) => e.toString())

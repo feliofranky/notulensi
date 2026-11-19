@@ -200,6 +200,11 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini secara akurat:
 {
   "is_empty_audio": false,
   "title": "Topik atau Judul Utama Rapat yang Ringkas dan Jelas (tanpa emoji)",
+  "agenda": [
+    "Poin agenda atau pokok bahasan utama 1",
+    "Poin agenda 2...",
+    "Poin agenda 3..."
+  ],
   "summary": "Ringkasan eksekutif jalannya rapat dalam 1-3 paragraf padat tentang latar belakang, pembahasan utama, dan kesimpulan.",
   "decisions": [
     "Poin keputusan 1 yang disepakati",
@@ -333,6 +338,14 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini secara akurat:
         }
       }
 
+      final agenda = <String>[];
+      if (parsedMap['agenda'] is List) {
+        for (var item in parsedMap['agenda']) {
+          final str = item.toString().trim();
+          if (str.isNotEmpty) agenda.add(str);
+        }
+      }
+
       final actionItems = <ActionItem>[];
       if (parsedMap['action_items'] is List) {
         for (var item in parsedMap['action_items']) {
@@ -360,6 +373,7 @@ Tugasmu menganalisis rekaman audio percakapan rapat ini secara akurat:
         date: now,
         durationSeconds: durationSeconds,
         audioPath: audioPath,
+        agenda: agenda,
         summary: summary,
         decisions: decisions,
         actionItems: actionItems,

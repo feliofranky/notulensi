@@ -91,6 +91,10 @@ class StorageService {
     }
   }
 
+  static Future<void> saveAllNotes(List<MeetingNote> notes) async {
+    await _saveAllNotes(notes);
+  }
+
   static Future<void> _saveAllNotes(List<MeetingNote> notes) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = notes.map((n) => n.toJson()).toList();

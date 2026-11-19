@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../models/meeting_note.dart';
+import '../services/docx_service.dart';
 import '../services/pdf_service.dart';
 import '../services/storage_service.dart';
 import 'processing_screen.dart';
@@ -493,6 +494,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             onSelected: (val) {
                               if (val == 'process') _openDraft(note);
                               if (val == 'copy') _copyWa(note);
+                              if (val == 'word') DocxService.exportDocx(note, context);
                               if (val == 'pdf') PdfService.showPdfOptionsSheet(context, note);
                               if (val == 'delete') _deleteNote(note);
                             },
@@ -516,6 +518,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       Icon(Icons.copy, size: 16, color: Color(0xFF34D399)),
                                       SizedBox(width: 8),
                                       Text('Salin Format WA', style: TextStyle(color: Color(0xFFF1F5F9))),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'word',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.description_outlined, size: 16, color: Color(0xFF60A5FA)),
+                                      SizedBox(width: 8),
+                                      Text('Ekspor Word (.docx)', style: TextStyle(color: Color(0xFFF1F5F9))),
                                     ],
                                   ),
                                 ),

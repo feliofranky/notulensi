@@ -149,8 +149,55 @@ class PdfService {
                 ),
               ],
             ),
+            if (note.location.trim().isNotEmpty ||
+                note.leader.trim().isNotEmpty ||
+                note.notetaker.trim().isNotEmpty) ...[
+              pw.SizedBox(height: 4),
+              pw.Row(
+                children: [
+                  if (note.location.trim().isNotEmpty) ...[
+                    pw.Text('Tempat/Media: ${note.location.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
+                    pw.SizedBox(width: 14),
+                  ],
+                  if (note.leader.trim().isNotEmpty) ...[
+                    pw.Text('Pimpinan: ${note.leader.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
+                    pw.SizedBox(width: 14),
+                  ],
+                  if (note.notetaker.trim().isNotEmpty)
+                    pw.Text('Notulis: ${note.notetaker.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
+                ],
+              ),
+            ],
+            if (note.participants.trim().isNotEmpty) ...[
+              pw.SizedBox(height: 4),
+              pw.Text('Peserta Hadir: ${note.participants.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
+            ],
             pw.SizedBox(height: 16),
           ];
+
+          // AGENDA RAPAT (Jika ada)
+          if (note.agenda.isNotEmpty) {
+            widgets.add(
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'AGENDA RAPAT',
+                    style: pw.TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: pw.FontWeight.bold,
+                      color: darkColor,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                  for (int i = 0; i < note.agenda.length; i++)
+                    _buildDecisionRow(i + 1, note.agenda[i], primaryColor, darkColor),
+                ],
+              ),
+            );
+            widgets.add(pw.SizedBox(height: 16));
+          }
 
           // RINGKASAN EKSEKUTIF (Justify)
           if (note.summary.trim().isNotEmpty) {
@@ -312,6 +359,51 @@ class PdfService {
               widgets.add(buildTranscriptParagraph(transcriptParagraphs[i]));
             }
           }
+
+          // KOLOM TANDA TANGAN (SEVIMA Standard: Disetujui oleh & Dibuat oleh)
+          final leaderSign = note.leader.trim().isNotEmpty
+              ? '( ${note.leader.trim()} )'
+              : '( ........................................ )';
+          final notetakerSign = note.notetaker.trim().isNotEmpty
+              ? '( ${note.notetaker.trim()} )'
+              : '( ........................................ )';
+
+          widgets.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 28, bottom: 10),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Container(
+                    width: 200,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Text('Disetujui oleh,', style: pw.TextStyle(fontSize: 9.5, color: darkColor)),
+                        pw.SizedBox(height: 2),
+                        pw.Text('Pimpinan Rapat', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: darkColor)),
+                        pw.SizedBox(height: 48),
+                        pw.Text(leaderSign, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: darkColor)),
+                      ],
+                    ),
+                  ),
+                  pw.Container(
+                    width: 200,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Text('Dibuat oleh,', style: pw.TextStyle(fontSize: 9.5, color: darkColor)),
+                        pw.SizedBox(height: 2),
+                        pw.Text('Notulis', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: darkColor)),
+                        pw.SizedBox(height: 48),
+                        pw.Text(notetakerSign, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: darkColor)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
 
           return widgets;
         },

@@ -24,8 +24,10 @@ class MainActivity : FlutterActivity() {
     private val PLAYER_CHANNEL = "com.herz.notulensi/audio_player"
 
     private val REQ_PICK_AUDIO = 4091
+    private val REQ_PICK_BACKUP = 4092
     private var pendingAudioPickResult: MethodChannel.Result? = null
     private var pendingAudioDestDir: String? = null
+    private var pendingBackupPickResult: MethodChannel.Result? = null
 
     private var mediaPlayer: MediaPlayer? = null
     private var loadedAudioPath: String? = null
@@ -61,7 +63,7 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // 2. Files Channel (Save PDF to Download, Open PDF, Pick External Audio)
+        // 2. Files Channel (Save PDF/DOCX/Backup to Download, Open, Pick Audio/Backup)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "savePdfToDownloads" -> {
@@ -72,7 +74,7 @@ class MainActivity : FlutterActivity() {
                         return@setMethodCallHandler
                     }
                     try {
-                        val savedUri = saveFileToDownloads(filePath, fileName)
+                        val savedUri = saveFileToDownloads(filePath, fileName, "application/pdf")
                         result.success(savedUri)
                     } catch (e: Exception) {
                         result.error("SAVE_ERROR", e.message ?: "Gagal menyimpan PDF ke Download", null)
@@ -95,6 +97,81 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("OPEN_ERROR", e.message ?: "Tidak ada aplikasi pembuka PDF", null)
+                    }
+                }
+                "saveDocxToDownloads" -> {
+                    val filePath = call.argument<String>("filePath")
+                    val fileName = call.argument<String>("fileName") ?: "Notulensi_HERZnote.docx"
+                    if (filePath.isNullOrEmpty()) {
+                        result.error("INVALID_ARGS", "Path file DOCX kosong", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val savedUri = saveFileToDownloads(
+                            filePath,
+                            fileName,
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                        result.success(savedUri)
+                    } catch (e: Exception) {
+                        result.error("SAVE_ERROR", e.message ?: "Gagal menyimpan Word (.docx) ke Download", null)
+                    }
+                }
+                "openDocxUri" -> {
+                    val uriStr = call.argument<String>("uri")
+                    if (uriStr.isNullOrEmpty()) {
+                        result.error("INVALID_ARGS", "URI file kosong", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val uri = Uri.parse(uriStr)
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(
+                                uri,
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            )
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(Intent.createChooser(intent, "Buka Dokumen Word dengan"))
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("OPEN_ERROR", e.message ?: "Tidak ada aplikasi pembuka Word (.docx)", null)
+                    }
+                }
+                "saveBackupToDownloads" -> {
+                    val filePath = call.argument<String>("filePath")
+                    val fileName = call.argument<String>("fileName") ?: "HERZnote_Backup.json"
+                    if (filePath.isNullOrEmpty()) {
+                        result.error("INVALID_ARGS", "Path file backup kosong", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val savedUri = saveFileToDownloads(filePath, fileName, "application/json")
+                        result.success(savedUri)
+                    } catch (e: Exception) {
+                        result.error("SAVE_ERROR", e.message ?: "Gagal menyimpan file backup", null)
+                    }
+                }
+                "pickBackupFile" -> {
+                    if (pendingBackupPickResult != null) {
+                        result.error("ALREADY_ACTIVE", "Pemilih file sedang terbuka", null)
+                        return@setMethodCallHandler
+                    }
+                    pendingBackupPickResult = result
+                    try {
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                            putExtra(
+                                Intent.EXTRA_MIME_TYPES,
+                                arrayOf("application/json", "text/plain", "application/octet-stream", "*/*")
+                            )
+                        }
+                        startActivityForResult(intent, REQ_PICK_BACKUP)
+                    } catch (e: Exception) {
+                        pendingBackupPickResult = null
+                        result.error("PICK_ERROR", e.message ?: "Gagal membuka pemilih berkas cadangan", null)
                     }
                 }
                 "pickAudioFile" -> {
@@ -286,6 +363,26 @@ class MainActivity : FlutterActivity() {
             } catch (e: Exception) {
                 callback.error("IMPORT_ERROR", e.message ?: "Gagal mengimpor file audio", null)
             }
+        } else if (requestCode == REQ_PICK_BACKUP) {
+            val callback = pendingBackupPickResult
+            pendingBackupPickResult = null
+
+            if (callback == null) return
+
+            if (resultCode != Activity.RESULT_OK || data?.data == null) {
+                callback.success(null)
+                return
+            }
+
+            val uri = data.data!!
+            try {
+                val jsonString = contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                }
+                callback.success(jsonString)
+            } catch (e: Exception) {
+                callback.error("BACKUP_READ_ERROR", e.message ?: "Gagal membaca berkas cadangan", null)
+            }
         }
     }
 
@@ -324,16 +421,16 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun saveFileToDownloads(sourcePath: String, fileName: String): String {
+    private fun saveFileToDownloads(sourcePath: String, fileName: String, mimeType: String = "application/pdf"): String {
         val sourceFile = File(sourcePath)
         if (!sourceFile.exists()) {
-            throw Exception("File sumber PDF tidak ditemukan")
+            throw Exception("Berkas sumber tidak ditemukan: $sourcePath")
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val contentValues = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
                 put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
@@ -345,7 +442,7 @@ class MainActivity : FlutterActivity() {
                 FileInputStream(sourceFile).use { input ->
                     input.copyTo(out)
                 }
-            } ?: throw Exception("Gagal menulis data PDF")
+            } ?: throw Exception("Gagal menulis data berkas")
 
             contentValues.clear()
             contentValues.put(MediaStore.Downloads.IS_PENDING, 0)

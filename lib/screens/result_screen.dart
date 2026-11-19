@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/meeting_note.dart';
+import '../services/docx_service.dart';
 import '../services/pdf_service.dart';
 import '../services/storage_service.dart';
 
@@ -27,6 +28,7 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
   late MeetingNote _note;
   late TabController _tabController;
   bool _isExportingPdf = false;
+  bool _isExportingWord = false;
 
   // Mini Audio Player state
   bool _hasAudioFile = false;
@@ -183,6 +185,239 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
       if (mounted) {
         setState(() => _isExportingPdf = false);
       }
+    }
+  }
+
+  Future<void> _exportWord() async {
+    setState(() => _isExportingWord = true);
+    try {
+      await DocxService.exportDocx(_note, context);
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingWord = false);
+      }
+    }
+  }
+
+  Future<void> _editMeetingInfo() async {
+    final locCtrl = TextEditingController(text: _note.location);
+    final leaderCtrl = TextEditingController(text: _note.leader);
+    final notetakerCtrl = TextEditingController(text: _note.notetaker);
+    final partCtrl = TextEditingController(text: _note.participants);
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF181B21),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF334155),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Informasi Tambahan Rapat (Opsional)',
+                style: TextStyle(
+                  color: Color(0xFFF1F5F9),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Akan dicantumkan pada kop dan kolom tanda tangan Word & PDF.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: locCtrl,
+                style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Tempat / Media Rapat',
+                  labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  hintText: 'Contoh: Ruang Rapat Lt. 2 / Zoom',
+                  hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+                  filled: true,
+                  fillColor: const Color(0xFF0F1115),
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: leaderCtrl,
+                      style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Pimpinan Rapat',
+                        labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        hintText: 'Bpk. Budi Santoso',
+                        hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+                        filled: true,
+                        fillColor: const Color(0xFF0F1115),
+                        contentPadding: const EdgeInsets.all(12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: notetakerCtrl,
+                      style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Notulis',
+                        labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        hintText: 'Rina Lestari',
+                        hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+                        filled: true,
+                        fillColor: const Color(0xFF0F1115),
+                        contentPadding: const EdgeInsets.all(12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: partCtrl,
+                style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: 'Daftar Peserta Hadir',
+                  labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  hintText: 'Budi, Siti, Andi, Deni, Rina',
+                  hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+                  filled: true,
+                  fillColor: const Color(0xFF0F1115),
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Batal', style: TextStyle(color: Color(0xFF94A3B8))),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      _note.location = locCtrl.text.trim();
+                      _note.leader = leaderCtrl.text.trim();
+                      _note.notetaker = notetakerCtrl.text.trim();
+                      _note.participants = partCtrl.text.trim();
+                      Navigator.pop(ctx, true);
+                    },
+                    child: const Text('Simpan'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      setState(() {});
+      await StorageService.saveNote(_note);
+    }
+  }
+
+  Future<void> _editOrAddAgenda({int? index}) async {
+    final isEdit = index != null;
+    final initialText = isEdit ? _note.agenda[index] : '';
+    final controller = TextEditingController(text: initialText);
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF181B21),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          isEdit ? 'Ubah Agenda Rapat' : 'Tambah Agenda Rapat',
+          style: const TextStyle(color: Color(0xFFF1F5F9), fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Color(0xFFF1F5F9), fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Tuliskan pokok bahasan atau agenda...',
+            hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
+            filled: true,
+            fillColor: const Color(0xFF0F1115),
+            contentPadding: const EdgeInsets.all(14),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          if (isEdit)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, {'action': 'delete'}),
+              child: const Text('Hapus', style: TextStyle(color: Color(0xFFF87171))),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, {'action': 'save', 'text': controller.text.trim()}),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+    if (result['action'] == 'delete' && isEdit) {
+      setState(() => _note.agenda.removeAt(index));
+      await StorageService.saveNote(_note);
+    } else if (result['action'] == 'save') {
+      final text = (result['text'] ?? '').toString();
+      if (text.isEmpty) return;
+      setState(() {
+        if (isEdit) {
+          _note.agenda[index] = text;
+        } else {
+          _note.agenda.add(text);
+        }
+      });
+      await StorageService.saveNote(_note);
     }
   }
 
@@ -492,6 +727,17 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
               onPressed: _editTitle,
             ),
             IconButton(
+              tooltip: 'Ekspor Word (.docx)',
+              icon: _isExportingWord
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
+                    )
+                  : const Icon(Icons.description_outlined, size: 20),
+              onPressed: _isExportingWord ? null : _exportWord,
+            ),
+            IconButton(
               tooltip: 'Ekspor PDF',
               icon: _isExportingPdf
                   ? const SizedBox(
@@ -529,8 +775,8 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: _copyWhatsAppFormat,
-                  icon: const Icon(Icons.copy, size: 18),
-                  label: const Text('Salin Format WhatsApp'),
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Salin Format WA', maxLines: 1, overflow: TextOverflow.ellipsis),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF10B981),
                     foregroundColor: Colors.white,
@@ -540,15 +786,32 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _isExportingWord ? null : _exportWord,
+                icon: _isExportingWord
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)))
+                    : const Icon(Icons.description, size: 16),
+                label: const Text('Word'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF262A34),
+                  foregroundColor: const Color(0xFFF1F5F9),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+              const SizedBox(width: 8),
               ElevatedButton.icon(
                 onPressed: _isExportingPdf ? null : _exportPdf,
-                icon: const Icon(Icons.picture_as_pdf, size: 18),
+                icon: _isExportingPdf
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)))
+                    : const Icon(Icons.picture_as_pdf, size: 16),
                 label: const Text('PDF'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF262A34),
                   foregroundColor: const Color(0xFFF1F5F9),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   elevation: 0,
                 ),
@@ -610,6 +873,72 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                       style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                     ),
                   ],
+                ),
+                if (_note.location.trim().isNotEmpty ||
+                    _note.leader.trim().isNotEmpty ||
+                    _note.notetaker.trim().isNotEmpty ||
+                    _note.participants.trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F1115),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_note.location.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              'Tempat/Media: ${_note.location.trim()}',
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
+                            ),
+                          ),
+                        if (_note.leader.trim().isNotEmpty || _note.notetaker.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              'Pimpinan: ${_note.leader.trim().isNotEmpty ? _note.leader.trim() : "-"}  |  Notulis: ${_note.notetaker.trim().isNotEmpty ? _note.notetaker.trim() : "-"}',
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
+                            ),
+                          ),
+                        if (_note.participants.trim().isNotEmpty)
+                          Text(
+                            'Peserta: ${_note.participants.trim()}',
+                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: InkWell(
+                    onTap: _editMeetingInfo,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _note.leader.isNotEmpty || _note.location.isNotEmpty ? Icons.edit_note : Icons.add_circle_outline,
+                            size: 14,
+                            color: const Color(0xFF10B981),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _note.leader.isNotEmpty || _note.location.isNotEmpty ? 'Ubah Info Rapat' : '+ Info Rapat (Pimpinan, Lokasi)',
+                            style: const TextStyle(color: Color(0xFF10B981), fontSize: 11.5, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -814,6 +1143,71 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                                 ],
                               ),
                             ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // AGENDA RAPAT (Editable + Addable, Right Above Summary)
+          _buildSectionHeader(
+            'AGENDA RAPAT',
+            Icons.format_list_numbered_rounded,
+            actionLabel: 'Tambah',
+            actionIcon: Icons.add,
+            onAction: () => _editOrAddAgenda(),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF181B21),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: _note.agenda.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      'Belum ada poin agenda. Ketuk Tambah untuk menambahkan.',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                    ),
+                  )
+                : Column(
+                    children: List.generate(_note.agenda.length, (idx) {
+                      final item = _note.agenda[idx];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => _editOrAddAgenda(index: idx),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 7.0, horizontal: 2),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${idx + 1}.',
+                                style: const TextStyle(
+                                  color: Color(0xFF10B981),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  item,
+                                  style: const TextStyle(
+                                    color: Color(0xFFF1F5F9),
+                                    fontSize: 13.5,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.edit_outlined, size: 14, color: Color(0xFF475569)),
+                            ],
                           ),
                         ),
                       );

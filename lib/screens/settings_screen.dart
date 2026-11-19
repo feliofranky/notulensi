@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/backup_service.dart';
 import '../services/gemini_service.dart';
 import '../services/storage_service.dart';
 
@@ -547,6 +548,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onChanged: (val) {
                             if (val != null) setState(() => _selectedSampleRate = val);
                           },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // PENCADANGAN & PEMULIHAN
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, bottom: 8),
+                    child: Text(
+                      'PENCADANGAN & PEMULIHAN',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF181B21),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        InkWell(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                          onTap: () => BackupService.exportBackup(context),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Row(
+                              children: [
+                                Icon(Icons.cloud_upload_outlined, color: Color(0xFF10B981), size: 22),
+                                SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Cadangkan Riwayat (Backup)',
+                                        style: TextStyle(
+                                          color: Color(0xFFF1F5F9),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Kemas semua notulensi ke berkas .json untuk disimpan/dipindah',
+                                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.chevron_right, color: Color(0xFF64748B), size: 20),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, color: Color(0xFF262A34)),
+                        InkWell(
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
+                          onTap: () => BackupService.restoreBackup(context, onRestored: () {
+                            if (mounted) setState(() {});
+                          }),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Row(
+                              children: [
+                                Icon(Icons.cloud_download_outlined, color: Color(0xFF38BDF8), size: 22),
+                                SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Pulihkan Data (Restore)',
+                                        style: TextStyle(
+                                          color: Color(0xFFF1F5F9),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Pilih berkas .json cadangan dengan opsi gabungkan data',
+                                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.chevron_right, color: Color(0xFF64748B), size: 20),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                     ),

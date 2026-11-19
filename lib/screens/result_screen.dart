@@ -874,75 +874,109 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                     ),
                   ],
                 ),
-                if (_note.location.trim().isNotEmpty ||
-                    _note.leader.trim().isNotEmpty ||
-                    _note.notetaker.trim().isNotEmpty ||
-                    _note.participants.trim().isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F1115),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_note.location.trim().isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              'Tempat/Media: ${_note.location.trim()}',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
-                            ),
-                          ),
-                        if (_note.leader.trim().isNotEmpty || _note.notetaker.trim().isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              'Pimpinan: ${_note.leader.trim().isNotEmpty ? _note.leader.trim() : "-"}  |  Notulis: ${_note.notetaker.trim().isNotEmpty ? _note.notetaker.trim() : "-"}',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
-                            ),
-                          ),
-                        if (_note.participants.trim().isNotEmpty)
-                          Text(
-                            'Peserta: ${_note.participants.trim()}',
-                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: InkWell(
+                if (_note.location.trim().isEmpty &&
+                    _note.leader.trim().isEmpty &&
+                    _note.notetaker.trim().isEmpty &&
+                    _note.participants.trim().isEmpty) ...[
+                  const SizedBox(height: 12),
+                  InkWell(
                     onTap: _editMeetingInfo,
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      child: Row(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F1115),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF262A34)),
+                      ),
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            _note.leader.isNotEmpty || _note.location.isNotEmpty ? Icons.edit_note : Icons.add_circle_outline,
-                            size: 14,
-                            color: const Color(0xFF10B981),
-                          ),
-                          const SizedBox(width: 4),
+                          Icon(Icons.add_circle_outline, size: 13, color: Color(0xFF10B981)),
+                          SizedBox(width: 6),
                           Text(
-                            _note.leader.isNotEmpty || _note.location.isNotEmpty ? 'Ubah Info Rapat' : '+ Info Rapat (Pimpinan, Lokasi)',
-                            style: const TextStyle(color: Color(0xFF10B981), fontSize: 11.5, fontWeight: FontWeight.bold),
+                            '+ Tambah Info Rapat (Pimpinan, Notulis, Lokasi)',
+                            style: TextStyle(color: Color(0xFF10B981), fontSize: 11.5, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
+
+          // INFORMASI TAMBAHAN RAPAT (Card Elegan & Rapi Sejajar Kolom)
+          if (_note.location.trim().isNotEmpty ||
+              _note.leader.trim().isNotEmpty ||
+              _note.notetaker.trim().isNotEmpty ||
+              _note.participants.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF181B21),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'INFORMASI RAPAT',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      InkWell(
+                        onTap: _editMeetingInfo,
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, size: 13, color: Color(0xFF10B981)),
+                              SizedBox(width: 4),
+                              Text('Ubah', style: TextStyle(color: Color(0xFF10B981), fontSize: 11.5, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (_note.location.trim().isNotEmpty)
+                    _buildMetaRow(Icons.place_outlined, 'Tempat / Media', _note.location.trim()),
+                  if (_note.leader.trim().isNotEmpty)
+                    _buildMetaRow(Icons.person_outline, 'Pimpinan Rapat', _note.leader.trim()),
+                  if (_note.notetaker.trim().isNotEmpty)
+                    _buildMetaRow(Icons.edit_note_rounded, 'Notulis', _note.notetaker.trim()),
+                  if (_note.participants.trim().isNotEmpty)
+                    _buildMetaRow(Icons.groups_outlined, 'Peserta Hadir', _note.participants.trim()),
+                ],
+              ),
+            ),
+          ],
 
           const SizedBox(height: 16),
 
@@ -1438,6 +1472,37 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                     );
                   }),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetaRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: const Color(0xFF10B981)),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 105,
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+            ),
+          ),
+          const Text(' : ', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Color(0xFFF1F5F9),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

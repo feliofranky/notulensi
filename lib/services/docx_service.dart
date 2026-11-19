@@ -112,47 +112,60 @@ class DocxService {
     </w:p>
 ''');
 
-    // METADATA RAPAT
+    // METADATA RAPAT (Tabel Sejajar Tanpa Garis Standar Format Resmi Kantor)
     docBuffer.write('''
-    <w:p>
-      <w:pPr><w:spacing w:before="0" w:after="60"/></w:pPr>
-      <w:r>
-        <w:rPr><w:sz w:val="19"/><w:szCs w:val="19"/><w:color w:val="4B5563"/></w:rPr>
-        <w:t>Hari, Tanggal: $dateStr  |  Durasi: ${note.formattedDuration}</w:t>
-      </w:r>
-    </w:p>
+    <w:tbl>
+      <w:tblPr>
+        <w:tblW w:w="9026" w:type="dxa"/>
+        <w:tblBorders>
+          <w:top w:val="none"/>
+          <w:left w:val="none"/>
+          <w:bottom w:val="none"/>
+          <w:right w:val="none"/>
+          <w:insideH w:val="none"/>
+          <w:insideV w:val="none"/>
+        </w:tblBorders>
+        <w:tblCellMar>
+          <w:top w:w="40" w:type="dxa"/>
+          <w:bottom w:w="40" w:type="dxa"/>
+          <w:left w:w="0" w:type="dxa"/>
+          <w:right w:w="120" w:type="dxa"/>
+        </w:tblCellMar>
+      </w:tblPr>
+      <w:tblGrid>
+        <w:gridCol w:w="1800"/>
+        <w:gridCol w:w="250"/>
+        <w:gridCol w:w="6976"/>
+      </w:tblGrid>
 ''');
 
-    if (note.location.trim().isNotEmpty ||
-        note.leader.trim().isNotEmpty ||
-        note.notetaker.trim().isNotEmpty) {
-      final infoParts = <String>[];
-      if (note.location.trim().isNotEmpty) infoParts.add('Tempat/Media: ${_esc(note.location.trim())}');
-      if (note.leader.trim().isNotEmpty) infoParts.add('Pimpinan Rapat: ${_esc(note.leader.trim())}');
-      if (note.notetaker.trim().isNotEmpty) infoParts.add('Notulis: ${_esc(note.notetaker.trim())}');
-
+    void addMetaRow(String label, String value) {
       docBuffer.write('''
-    <w:p>
-      <w:pPr><w:spacing w:before="0" w:after="60"/></w:pPr>
-      <w:r>
-        <w:rPr><w:sz w:val="19"/><w:szCs w:val="19"/><w:color w:val="4B5563"/></w:rPr>
-        <w:t>${infoParts.join('  |  ')}</w:t>
-      </w:r>
-    </w:p>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="1800" w:type="dxa"/></w:tcPr>
+          <w:p><w:pPr><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="20"/><w:color w:val="4B5563"/></w:rPr><w:t>${_esc(label)}</w:t></w:r></w:p>
+        </w:tc>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="250" w:type="dxa"/></w:tcPr>
+          <w:p><w:pPr><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/><w:color w:val="4B5563"/></w:rPr><w:t>:</w:t></w:r></w:p>
+        </w:tc>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="6976" w:type="dxa"/></w:tcPr>
+          <w:p><w:pPr><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/><w:color w:val="111827"/></w:rPr><w:t>${_esc(value)}</w:t></w:r></w:p>
+        </w:tc>
+      </w:tr>
 ''');
     }
 
-    if (note.participants.trim().isNotEmpty) {
-      docBuffer.write('''
-    <w:p>
-      <w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr>
-      <w:r>
-        <w:rPr><w:sz w:val="19"/><w:szCs w:val="19"/><w:color w:val="4B5563"/></w:rPr>
-        <w:t>Peserta Hadir: ${_esc(note.participants.trim())}</w:t>
-      </w:r>
-    </w:p>
-''');
-    }
+    addMetaRow('Hari, Tanggal', dateStr);
+    addMetaRow('Waktu / Durasi', note.formattedDuration);
+    if (note.location.trim().isNotEmpty) addMetaRow('Tempat / Media', note.location.trim());
+    if (note.leader.trim().isNotEmpty) addMetaRow('Pimpinan Rapat', note.leader.trim());
+    if (note.notetaker.trim().isNotEmpty) addMetaRow('Notulis', note.notetaker.trim());
+    if (note.participants.trim().isNotEmpty) addMetaRow('Peserta Hadir', note.participants.trim());
+
+    docBuffer.write('    </w:tbl>\n');
 
     // GARIS PEMISAH
     docBuffer.write('''

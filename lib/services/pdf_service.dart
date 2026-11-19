@@ -135,44 +135,30 @@ class PdfService {
             ),
             pw.SizedBox(height: 6),
 
-            // METADATA RAPAT
-            pw.Row(
-              children: [
-                pw.Text(
-                  'Tanggal: $dateStr',
-                  style: pw.TextStyle(fontSize: 9.5, color: grayColor),
-                ),
-                pw.SizedBox(width: 16),
-                pw.Text(
-                  'Durasi Rapat: ${note.formattedDuration}',
-                  style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: darkColor),
-                ),
-              ],
-            ),
-            if (note.location.trim().isNotEmpty ||
-                note.leader.trim().isNotEmpty ||
-                note.notetaker.trim().isNotEmpty) ...[
-              pw.SizedBox(height: 4),
-              pw.Row(
+            // METADATA RAPAT (Tabel Rapi Sejajar Kolom Sesuai Format Resmi)
+            pw.Container(
+              padding: const pw.EdgeInsets.only(top: 2, bottom: 4),
+              child: pw.Table(
+                columnWidths: const {
+                  0: pw.FixedColumnWidth(85),
+                  1: pw.FixedColumnWidth(10),
+                  2: pw.FlexColumnWidth(),
+                },
                 children: [
-                  if (note.location.trim().isNotEmpty) ...[
-                    pw.Text('Tempat/Media: ${note.location.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
-                    pw.SizedBox(width: 14),
-                  ],
-                  if (note.leader.trim().isNotEmpty) ...[
-                    pw.Text('Pimpinan: ${note.leader.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
-                    pw.SizedBox(width: 14),
-                  ],
+                  _buildPdfMetaRow('Hari, Tanggal', dateStr, darkColor, grayColor),
+                  _buildPdfMetaRow('Waktu / Durasi', note.formattedDuration, darkColor, grayColor),
+                  if (note.location.trim().isNotEmpty)
+                    _buildPdfMetaRow('Tempat / Media', note.location.trim(), darkColor, grayColor),
+                  if (note.leader.trim().isNotEmpty)
+                    _buildPdfMetaRow('Pimpinan Rapat', note.leader.trim(), darkColor, grayColor),
                   if (note.notetaker.trim().isNotEmpty)
-                    pw.Text('Notulis: ${note.notetaker.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
+                    _buildPdfMetaRow('Notulis', note.notetaker.trim(), darkColor, grayColor),
+                  if (note.participants.trim().isNotEmpty)
+                    _buildPdfMetaRow('Peserta Hadir', note.participants.trim(), darkColor, grayColor),
                 ],
               ),
-            ],
-            if (note.participants.trim().isNotEmpty) ...[
-              pw.SizedBox(height: 4),
-              pw.Text('Peserta Hadir: ${note.participants.trim()}', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
-            ],
-            pw.SizedBox(height: 16),
+            ),
+            pw.SizedBox(height: 14),
           ];
 
           // AGENDA RAPAT (Jika ada)
@@ -419,6 +405,31 @@ class PdfService {
     await file.writeAsBytes(await pdf.save());
 
     return {'filePath': filePath, 'fileName': fileName};
+  }
+
+  static pw.TableRow _buildPdfMetaRow(String label, String value, PdfColor darkColor, PdfColor grayColor) {
+    return pw.TableRow(
+      children: [
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 3.5),
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(fontSize: 9.5, color: grayColor, fontWeight: pw.FontWeight.bold),
+          ),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 3.5),
+          child: pw.Text(':', style: pw.TextStyle(fontSize: 9.5, color: grayColor)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 3.5),
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 9.5, color: darkColor),
+          ),
+        ),
+      ],
+    );
   }
 
   static pw.Widget _buildDecisionRow(int number, String text, PdfColor primaryColor, PdfColor darkColor) {

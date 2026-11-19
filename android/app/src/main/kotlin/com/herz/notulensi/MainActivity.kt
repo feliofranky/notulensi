@@ -428,13 +428,29 @@ class MainActivity : FlutterActivity() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = applicationContext.contentResolver
+
+            // Hapus berkas lama jika ada yang bernama sama persis agar langsung menimpa (replace),
+            // sehingga tidak menumpuk berkas duplikat dengan akhiran (1), (2), (3) di folder Download.
+            try {
+                val projection = arrayOf(MediaStore.Downloads._ID)
+                val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ?"
+                val selectionArgs = arrayOf(fileName)
+                resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, projection, selection, selectionArgs, null)?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID))
+                        val existingUri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
+                        resolver.delete(existingUri, null, null)
+                    }
+                }
+            } catch (_: Exception) {}
+
             val contentValues = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
                 put(MediaStore.Downloads.MIME_TYPE, mimeType)
                 put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
-            val resolver = applicationContext.contentResolver
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                 ?: throw Exception("Gagal membuat berkas di folder Download")
 

@@ -79,31 +79,32 @@ class MeetingNote {
     return DateFormat('dd MMMM yyyy, HH:mm', 'id').format(date);
   }
 
-  /// Format bersih dan profesional siap dibagikan ke WhatsApp tanpa emoji
+  /// Format rapi, visual, dan keren siap dibagikan ke WhatsApp dengan ikon elegan
   String toWhatsAppFormat() {
     final buffer = StringBuffer();
     final dateStr = DateFormat('EEEE, dd MMM yyyy - HH:mm', 'id').format(date);
 
-    buffer.writeln('*NOTULENSI RAPAT: ${title.toUpperCase()}*');
-    buffer.writeln('Tanggal: $dateStr');
-    buffer.writeln('Durasi Rekaman: $formattedDuration');
+    buffer.writeln('📋 *NOTULENSI RAPAT: ${title.toUpperCase()}*');
+    buffer.writeln('🗓️ $dateStr');
+    buffer.writeln('⏱️ Durasi Rekaman: $formattedDuration');
     if (location.trim().isNotEmpty) {
-      buffer.writeln('Tempat/Media: ${location.trim()}');
+      buffer.writeln('📍 Tempat/Media: ${location.trim()}');
     }
     if (leader.trim().isNotEmpty) {
-      buffer.writeln('Pimpinan Rapat: ${leader.trim()}');
+      buffer.writeln('👤 Pimpinan Rapat: ${leader.trim()}');
     }
     if (notetaker.trim().isNotEmpty) {
-      buffer.writeln('Notulis: ${notetaker.trim()}');
+      buffer.writeln('✍️ Notulis: ${notetaker.trim()}');
     }
     if (participants.trim().isNotEmpty) {
-      buffer.writeln('Peserta Hadir: ${participants.trim()}');
+      buffer.writeln('👥 Peserta Hadir: ${participants.trim()}');
     }
-    buffer.writeln('─────────────────────────');
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━');
     buffer.writeln('');
 
     if (agenda.isNotEmpty) {
-      buffer.writeln('*AGENDA RAPAT:*');
+      buffer.writeln('📌 *AGENDA RAPAT:*');
       for (int i = 0; i < agenda.length; i++) {
         buffer.writeln('${i + 1}. ${agenda[i]}');
       }
@@ -111,13 +112,13 @@ class MeetingNote {
     }
 
     if (summary.trim().isNotEmpty) {
-      buffer.writeln('*RINGKASAN PEMBAHASAN:*');
+      buffer.writeln('📝 *RINGKASAN EKSEKUTIF:*');
       buffer.writeln(summary.trim());
       buffer.writeln('');
     }
 
     if (decisions.isNotEmpty) {
-      buffer.writeln('*KEPUTUSAN RAPAT:*');
+      buffer.writeln('⚖️ *KEPUTUSAN RAPAT:*');
       for (int i = 0; i < decisions.length; i++) {
         buffer.writeln('${i + 1}. ${decisions[i]}');
       }
@@ -125,18 +126,19 @@ class MeetingNote {
     }
 
     if (actionItems.isNotEmpty) {
-      buffer.writeln('*ACTION ITEMS & PIC:*');
+      buffer.writeln('✅ *ACTION ITEMS & PIC:*');
       for (int i = 0; i < actionItems.length; i++) {
         final item = actionItems[i];
         final dl = item.deadline != '-' ? ' (Deadline: ${item.deadline})' : '';
-        final status = item.isCompleted ? ' [Selesai]' : '';
+        final status = item.isCompleted ? ' ✅ [Selesai]' : '';
         buffer.writeln('${i + 1}. [${item.pic}] ${item.task}$dl$status');
       }
       buffer.writeln('');
     }
 
-    buffer.writeln('─────────────────────────');
-    buffer.writeln('_Disusun oleh HerzNote AI_');
+    buffer.writeln('════════════════════');
+    buffer.writeln('════════════════════');
+    buffer.writeln('_Disusun otomatis oleh HerzNote AI_');
 
     return buffer.toString();
   }
